@@ -30,6 +30,7 @@ import { loadOtReuse } from "@/lib/ot-reuse";
 import { PARKING_BUCKET, parkingReceiptPaths } from "@/lib/parking-receipts";
 import ManualEntryStar from "@/components/ManualEntryStar";
 import { employeeLabel } from "@/lib/employee-label";
+import { noTimeOff } from "@/lib/no-time-off";
 
 const JOB_COLUMNS = "id, user_id, job_date, status, ot, depart, arrivee, fin, started_at, ended_at, km_total, km_aller, km_retour, return_time_minutes, overtime_evidence_captured, updated_at";
 
@@ -70,15 +71,14 @@ export default function TodoInbox() {
       // day comes first; if everyone submitted it, the work day before it is checked, back to this week's Monday.
       const lookback = lookbackWorkdays(today, await loadHolidayDates());
       const prevDay = lookback[0];
-      const oldestDay = lookback[lookback.length - 1];
       const [submittedRes, peopleRes, mealsRes, parkingRes, settingsRes, timeOffRes, prevJobsRes] = await Promise.all([
         // Weeks paid by Dynacom (up to the imported cumulative, end of week 42) are closed: their jobs are not listed.
         withRetry(() => supabase.from("jobs").select(JOB_COLUMNS).eq("status", "submitted").gt("job_date", DYNACOM_CUMULATIVE_END).order("job_date", { ascending: true }).order("id").limit(QUERY_BUDGETS.todoSubmittedJobs), 12000),
-        withRetry(() => supabase.from("profiles").select("id, employee_number, role, is_paused, start_date, apprentice_level, first_trip_unpaid, ten_hour_days"), 12000),
+        withRetry(() => supabase.from("profiles").select("id, employee_number, role, is_paused, first_trip_unpaid, ten_hour_days"), 12000),
         withRetry(() => supabase.from("meal_claims").select("id, job_id, user_id, job_date, amount, status").eq("status", "pending").order("job_date").limit(QUERY_BUDGETS.reviewQueue), 12000),
         withRetry(() => supabase.from("parking_receipts").select("job_id, user_id, job_date, amount, status, storage_path, extra_storage_paths").eq("status", "pending").order("job_date").limit(QUERY_BUDGETS.reviewQueue), 12000),
         supabase.from("company_time_settings").select("*").eq("id", true).maybeSingle(),
-        supabase.from("employee_time_off").select("user_id, kind, start_date, end_date, start_time, weekdays, exception_dates").lte("start_date", prevDay).or(`end_date.gte.${oldestDay},end_date.is.null`),
+        noTimeOff(),
         supabase.from("jobs").select("user_id, status, job_date").in("job_date", lookback),
       ]);
       for (const res of [submittedRes, peopleRes, mealsRes, parkingRes]) if (res.error) throw res.error;

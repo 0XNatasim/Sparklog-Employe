@@ -21,10 +21,10 @@ describe("Gestion menu", () => {
   });
 
 
-  it("Notes has two tabs, My notes and Foreman (0134), for the managers only", () => {
+  it("Notes has one tab, Foreman (0134), for the managers only (personal notes are on side 2)", () => {
     const notes = byId("notes");
-    expect(notes.tabs.map((t) => t.key)).toEqual(["mine", "foreman"]);
-    expect(visibleTabs(notes, "manager", []).map((t) => t.key)).toEqual(["mine", "foreman"]);
+    expect(notes.tabs.map((t) => t.key)).toEqual(["foreman"]);
+    expect(visibleTabs(notes, "manager", []).map((t) => t.key)).toEqual(["foreman"]);
     for (const role of ["employee", "foreman", "subcontractor_1"]) expect(visibleTabs(notes, role, [])).toEqual([]);
     expect(visibleTabs(notes, "admin", [...GRANTABLE_ADMIN_SECTIONS])).toEqual([]);
   });

@@ -3,7 +3,6 @@
 // (Inventaire › Minimums par entrepôt, 0121-0122).
 // Manager-level only (RLS); a person can be in several groups.
 import { supabase } from "@/supabaseClient";
-import { DEPARTURE_STATUSES, isNewHire } from "@/lib/signups";
 import { withTimeout } from "@/lib/utils";
 import { employeeLabel } from "@/lib/employee-label";
 
@@ -47,13 +46,6 @@ export function groupsTargetIds(groups, groupIds, allowed) {
   return (allowed || []).filter((person) => members.has(person.id)).map((person) => person.id);
 }
 
-// Among the recipients, the new hires who have not started yet (« En attente », 0110): the manager is
-// asked whether they get the message too.
-export function pendingNewHires(people, targetIds, today) {
-  const ids = new Set(targetIds || []);
-  return (people || []).filter((person) => ids.has(person.id) && isNewHire(person, today));
-}
-
 // Members of a group that can still be shown, in name order; former / paused accounts flagged.
 export function groupMembers(group, profiles) {
   const byId = new Map((profiles || []).map((profile) => [profile.id, profile]));
@@ -67,11 +59,11 @@ export function groupMembers(group, profiles) {
 // office admins, managers or the owner), active or waiting to start, never a paused or former account.
 // In name order.
 const FIELD_ROLES = new Set(["employee", "foreman", "subcontractor_1"]);
-export function ungroupedPeople(groups, people, today) {
+export function ungroupedPeople(groups, people) {
   const grouped = new Set((groups || []).flatMap((group) => group.memberIds || []));
   return (people || [])
     .filter((person) => FIELD_ROLES.has(person.role || "employee") && !grouped.has(person.id))
-    .filter((person) => isNewHire(person, today) || (!person.is_paused && !DEPARTURE_STATUSES.includes(person.departure_status)))
+    .filter((person) => !person.is_paused)
     .sort((a, b) => (employeeLabel(a) || "").localeCompare(employeeLabel(b) || "", "fr-CA", { sensitivity: "base" }));
 }
 

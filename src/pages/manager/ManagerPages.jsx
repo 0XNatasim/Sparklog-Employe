@@ -17,11 +17,9 @@ const MissingDaysPanel = lazyPanel(() => import("@/components/manager/MissingDay
 const UnlockDayManager = lazyPanel(() => import("@/components/UnlockDayManager"));
 const AuditLog = lazyPanel(() => import("@/components/AuditLog"));
 const EmployeeActivityLog = lazyPanel(() => import("@/components/EmployeeActivityLog"));
-const InfraHealthCard = lazyPanel(() => import("@/components/InfraHealthCard"));
 const InventoryMinimums = lazyPanel(() => import("@/components/InventoryMinimums"));
 const InventoryScreenshotsPanel = lazyPanel(() => import("@/components/InventoryScreenshotsPanel"));
 const EmergencyTimesheet = lazyPanel(() => import("@/components/EmergencyTimesheet"));
-const NotesPanel = lazyPanel(() => import("@/components/manager/NotesPanel"));
 const ForemanReportsPanel = lazyPanel(() => import("@/components/manager/ForemanReportsPanel"));
 const ManagerDashboard = lazyPanel(() => import("@/pages/ManagerDashboard"));
 
@@ -67,9 +65,7 @@ export const TodoPage = () => <TodoInbox />;
 
 export const InventoryPage = () => <InventoryScreenshotsPanel />;
 export const InventoryMinimumsPage = () => <InventoryMinimums />;
-export const HealthPage = () => <InfraHealthCard />;
 export const EmergencyPage = () => <EmergencyTimesheet />;
-export const NotesPage = () => <NotesPanel />;
 
 // ── Avancé › Journal: manager actions · employee activity ───────────────────
 export function AuditPage() {
@@ -147,7 +143,7 @@ function TabbedPage({ itemId, content }) {
 const TODO_TABS = { todo: TodoPage, receipts: () => <ManagerDashboard view="receipts" reviewFilters /> };
 // Timesheets: cards with the employee's name first, the « Entrées à la main » filter, plain words.
 const TIME_TABS = { timesheets: () => <ManagerDashboard view="timesheet" nameFirst manualFilter plainWords />, unlock: () => <Narrow><UnlockDayManager plainWords /></Narrow>, missing: () => <Narrow><MissingDaysPanel /></Narrow> };
-const NOTES_TABS = { mine: NotesPage, foreman: () => <ForemanReportsPanel /> };
+const NOTES_TABS = { foreman: () => <ForemanReportsPanel /> };
 export const NotesTabsPage = () => <TabbedPage itemId="notes" content={NOTES_TABS} />;
 export const TodoTabsPage = () => <TabbedPage itemId="todo" content={TODO_TABS} />;
 export const TimeHubPage = () => <TabbedPage itemId="v3-time" content={TIME_TABS} />;

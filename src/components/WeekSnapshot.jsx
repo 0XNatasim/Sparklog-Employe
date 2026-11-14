@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { liveRoster, notStartedOn, weekCellSummary } from "@/lib/live-crew";
 import { employeeLabel } from "@/lib/employee-label";
+import { noTimeOff } from "@/lib/no-time-off";
 
 // Compact current-week (Sunday → Saturday) overview: per employee and per day, the total
 // time, the number of ORs and a colour for saved (orange) / submitted (green) / missing (red).
@@ -72,9 +73,9 @@ export default function WeekSnapshot({ onSelectEmployee, weekOffset = 0 }) {
     let alive = true;
     const weekEnd = days[6];
     Promise.all([
-      supabase.from("profiles").select("id, employee_number, role, is_paused, start_date, ten_hour_days, first_trip_unpaid").order("employee_number"),
+      supabase.from("profiles").select("id, employee_number, role, is_paused, ten_hour_days, first_trip_unpaid").order("employee_number"),
       supabase.from("jobs").select("id, user_id, status, depart, arrivee, fin, job_date, km_total, km_aller, km_retour, overtime_evidence_captured").gte("job_date", weekStart).lte("job_date", weekEnd),
-      supabase.from("employee_time_off").select("user_id, kind, start_date, end_date, start_time, weekdays, exception_dates").lte("start_date", weekEnd).or(`end_date.gte.${weekStart},end_date.is.null`),
+      noTimeOff(),
       // The rounding counters (15 min per day): without them the squares still show, only the paid line is missing.
       loadDayRounding({ untilDate: weekEnd }).catch(() => new Map()),
     ]).then(([p, j, o, r]) => {

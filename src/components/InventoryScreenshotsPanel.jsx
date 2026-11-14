@@ -15,7 +15,6 @@ import { friendlyErrorMessage } from "@/lib/error-messages";
 import { COMPLEMENT_SLOT, DEFECTIVE_SLOT, INVENTORY_BUCKET, INVENTORY_PHOTO_SLOTS, inventoryCandidates } from "@/lib/inventory-screenshots";
 import { INVENTORY_STATE_ORDER, compareInventory, effectiveOcrStatus, markInventoryAbsences, summarizeInventoryDay } from "@/lib/inventory-items";
 import { categoryLabel } from "@/lib/timeoff";
-import { isNewHire } from "@/lib/signups";
 import { deleteInventoryScreenshots, fetchPreviousInventory, requestInventoryReading } from "@/lib/inventory-upload";
 import { alertDisplayName, dismissInventoryNegativeAlert, fetchInventoryNegativeAlerts, groupInventoryNegativeAlerts, INVENTORY_ALERTS_EVENT } from "@/lib/inventory-alerts";
 import InventoryLowStock from "@/components/InventoryLowStock";
@@ -25,6 +24,7 @@ import { useLowStock } from "@/lib/use-low-stock";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { QUERY_BUDGETS } from "@/lib/query-budgets";
 import { employeeLabel } from "@/lib/employee-label";
+import { noTimeOff } from "@/lib/no-time-off";
 
 const CHIP_CLASS = {
   missing: "border-destructive/40 bg-destructive/10 text-destructive",
@@ -42,7 +42,7 @@ const fetchAlerts = () => fetchInventoryNegativeAlerts().then((rows) => ({ rows 
 async function fetchInventoryDay(date) {
   const [peopleResult, shotsResult, itemsResult, timeOffResult] = await Promise.all([
     withTimeout(
-      supabase.from("profiles").select("id, employee_number, role, is_paused, departure_status, start_date, inventory_screenshots_enabled").order("employee_number").limit(QUERY_BUDGETS.inventoryPeople),
+      supabase.from("profiles").select("id, employee_number, role, is_paused, inventory_screenshots_enabled").order("employee_number").limit(QUERY_BUDGETS.inventoryPeople),
       12000
     ),
     withTimeout(
@@ -55,11 +55,7 @@ async function fetchInventoryDay(date) {
         .eq("job_date", date).limit(QUERY_BUDGETS.inventoryItems),
       12000
     ),
-    withTimeout(
-      supabase.from("employee_time_off").select("user_id, category, kind, start_date, end_date, start_time, weekdays, exception_dates")
-        .lte("start_date", date).or(`end_date.gte.${date},end_date.is.null`).limit(QUERY_BUDGETS.inventoryPeople),
-      12000
-    ),
+    noTimeOff(),
   ]);
   for (const result of [peopleResult, shotsResult, itemsResult, timeOffResult]) if (result.error) throw result.error;
   return { people: peopleResult.data || [], shots: shotsResult.data || [], items: itemsResult.data || [], timeOff: timeOffResult.data || [] };
@@ -176,7 +172,7 @@ export default function InventoryScreenshotsPanel() {
     for (const item of items) itemsBy.set(item.user_id, [...(itemsBy.get(item.user_id) || []), item]);
     // Expected: the option is on and the person works that day (not paused, gone, or yet to start).
     // Anyone who sent screenshots is always listed.
-    const expected = (p) => p.inventory_screenshots_enabled && !p.is_paused && !p.departure_status && !isNewHire(p, date);
+    const expected = (p) => p.inventory_screenshots_enabled && !p.is_paused;
     const rows = people
       .filter((p) => expected(p) || shotsBy.has(p.id))
       .map((p) => ({ person: p, name: employeeLabel(p) || p.id, ...summarizeInventoryDay(shotsBy.get(p.id) || [], itemsBy.get(p.id) || []), shots: shotsBy.get(p.id) || [] }))

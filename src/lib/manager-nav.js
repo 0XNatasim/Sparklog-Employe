@@ -16,7 +16,6 @@ export const MANAGER_PAGES = Object.freeze([
   { id: "unlock-day", path: "unlock-day", grant: "employees", labelKey: "mgr.nav.unlockDay" },
   { id: "inventory", path: "inventory", grant: null, labelKey: "mgr.nav.inventory" },
   { id: "advanced-audit", path: "advanced/audit", grant: null, labelKey: "mgr.nav.audit" },
-  { id: "advanced-health", path: "advanced/health", grant: null, labelKey: "mgr.nav.health" },
   { id: "advanced-emergency", path: "advanced/emergency", grant: null, ownerOnly: true, labelKey: "mgr.nav.emergency" },
 ].map((item) => Object.freeze(item)));
 
@@ -31,10 +30,8 @@ const MENU_ONLY_ITEMS = Object.freeze([
     Object.freeze({ key: "todo", grant: null, labelKey: "mgr.nav3.tab.toApprove" }),
     tab("receipts", "receipts", "mgr.nav.receipts"),
   ] },
-  // My own notes and reminders (0111): private to each manager / owner.
-  // Notes › Contremaître (0134): the short reports of the foremen, read by the managers.
+  // Notes du contremaître : les courts rapports des contremaîtres, lus par les gestionnaires. Les notes personnelles des gestionnaires sont au côté 2.
   { id: "notes", path: "notes", grant: null, labelKey: "mgr.nav3.notes", tabs: [
-    Object.freeze({ key: "mine", grant: null, labelKey: "mgr.nav3.tab.myNotes" }),
     Object.freeze({ key: "foreman", grant: null, labelKey: "mgr.nav3.tab.foreman" }),
   ] },
   { id: "v3-time", path: "v3/time", grant: null, labelKey: "mgr.nav.timesheets", tabs: [
@@ -58,7 +55,7 @@ export const MANAGER_NAV = Object.freeze([
   { id: "time", labelKey: "mgr.group.time", open: false, items: [entry("v3-time")] },
   { id: "team", labelKey: "mgr.group.team", open: false, items: [entry("inventory")] },
   { id: "advanced", labelKey: "mgr.nav3.group.admin", open: false, items: [
-    entry("advanced-audit"), entry("advanced-health"), entry("advanced-emergency"),
+    entry("advanced-audit"), entry("advanced-emergency"),
   ] },
 ]);
 

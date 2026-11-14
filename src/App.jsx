@@ -19,7 +19,6 @@ const ManagerLayout = lazy(() => import("./components/manager/ManagerLayout"));
 const managerPage = (name) => lazy(() => import("./pages/manager/ManagerPages").then((m) => ({ default: m[name] })));
 const AuditPage = managerPage("AuditPage");
 const EmergencyPage = managerPage("EmergencyPage");
-const HealthPage = managerPage("HealthPage");
 const LivePage = managerPage("LivePage");
 const TodoTabsPage = managerPage("TodoTabsPage");
 const NotesTabsPage = managerPage("NotesTabsPage");
@@ -135,7 +134,6 @@ export default function App() {
           <Route path="v3/time" element={<TimeHubPage />} />
           <Route path="advanced" element={<Navigate to="audit" replace />} />
           <Route path="advanced/audit" element={<AuditPage />} />
-          <Route path="advanced/health" element={<HealthPage />} />
           <Route path="notes" element={<NotesTabsPage />} />
           <Route path="advanced/emergency" element={<EmergencyPage />} />
           {/* Old paths (the V2 menu, removed in V2.4.186) → the page and tab that hold them now */}

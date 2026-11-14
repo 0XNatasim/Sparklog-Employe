@@ -15,6 +15,7 @@ import { useT } from "@/lib/use-t";
 import { companyDate } from "@/lib/company-time";
 import { activePeopleOnLeave, dayStatus, liveRoster, notSubmittedYesterday } from "@/lib/live-crew";
 import { employeeLabel } from "@/lib/employee-label";
+import { noTimeOff } from "@/lib/no-time-off";
 
 const REFRESH_MS = 30000;
 
@@ -28,9 +29,9 @@ async function fetchLiveCrew(targetDate) {
   const today = targetDate || montrealDate();
   const yesterday = dayjs(today).subtract(1, "day").format("YYYY-MM-DD");
   const [{ data: people }, { data: jobs }, { data: timeOff }, { data: yJobs }, holidays] = await Promise.all([
-    supabase.from("profiles").select("id, employee_number, role, is_paused, start_date").order("employee_number"),
+    supabase.from("profiles").select("id, employee_number, role, is_paused").order("employee_number"),
     supabase.from("jobs").select("id, user_id, ot, status, depart, fin, job_date, updated_at, overtime_evidence_captured").eq("job_date", today),
-    supabase.from("employee_time_off").select("user_id, kind, start_date, end_date, start_time, weekdays, exception_dates").lte("start_date", today).or(`end_date.gte.${yesterday},end_date.is.null`),
+    noTimeOff(),
     supabase.from("jobs").select("user_id, status").eq("job_date", yesterday),
     loadHolidayDates(),
   ]);

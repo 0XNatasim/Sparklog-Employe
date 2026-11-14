@@ -26,7 +26,7 @@ export default function MissingDaysPanel() {
 
   useEffect(() => {
     let alive = true;
-    supabase.from("profiles").select("id, employee_number, role, admin_sections, is_paused, start_date").order("employee_number").then(({ data, error }) => {
+    supabase.from("profiles").select("id, employee_number, role, admin_sections, is_paused").order("employee_number").then(({ data, error }) => {
       if (!alive) return;
       if (error) setResult({ key: "error", days: [], error: error.message });
       // Employees only: anyone who can open Gestion is left out, like the Journal.

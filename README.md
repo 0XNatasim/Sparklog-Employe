@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.18.0
+# Sparklog-Employés (côté 1 : pointage) — V0.19.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.18.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.19.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -56,3 +56,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.17.0 :** outil de contrôle `scripts/check-app-against-schema.mjs` (compare les tables, colonnes et fonctions que l'app appelle à la structure de `supabase/next/`, relevée par `DUMP_SCHEMA=… scripts/test-next-schema.sh`) ; premier relevé : 29 écarts, triés dans `docs/ecarts-app-schema.md` (A à retirer, B à adapter, C à porter ou retirer). Aucun changement d'application.
 
 **V0.18.0 :** `supabase/next/0013_manager_tools` : source de saisie (`job_entry_sources`, étoile « saisie manuelle »), compteurs `manager_job_counts`, `ot_reuse_for_jobs` (renvoie le numéro de l'autre employé), `evidence_download_alert`, diagnostic de lecture de photo (`file_read_errors` + `log_file_read_error`, sans navigateur ni appareil), feuille d'urgence (`delete_manager_entry`, `remind_manager_entry` par avis à l'employé), avec test SQL et 11 mutations vérifiées. « État du service » abandonné. App : `job-anomalies` lit `other_employee_number`, `file-read-report` n'envoie plus navigateur ni mode d'installation, le rappel de la feuille d'urgence n'envoie plus d'annonce. Écarts app ↔ schéma : 29 → 22.
+
+**V0.19.0 :** retrait du côté 1 de ce qui appartient au côté 2 : notes personnelles des gestionnaires (`NotesPanel`, `NoteThread`, `lib/notes`), taux et barèmes de paie (`lib/payroll-rates`), inscriptions et dates d'embauche (`lib/signups`), carte « État du service » (`InfraHealthCard`, fonction `infra_metrics`, route `advanced/health`). Le temps libre n'est plus lu (`src/lib/no-time-off.js` renvoie une liste vide aux calculs) ; plus de `start_date`, `apprentice_level` ni `departure_status` dans les lectures ; l'entrée Notes du menu n'a plus que l'onglet Contremaître. Écarts app ↔ schéma : 22 → 6.

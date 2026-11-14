@@ -1,8 +1,8 @@
 # Écarts entre l'application (`src/`) et le schéma neuf (`supabase/next/`)
 
-Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh && node scripts/check-app-against-schema.mjs /tmp/schema.json` (analyse statique approximative : `.from()` + select / filtres / écritures, et `.rpc()`). État au **V0.18.0 : 22 écarts** (29 en V0.17.0 ; le groupe C est porté par la migration 0013, `get_infra_stats` abandonné). Objectif : 0, puis ajouter ce contrôle à la CI (il demande PostgreSQL 16).
+Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh && node scripts/check-app-against-schema.mjs /tmp/schema.json` (analyse statique approximative : `.from()` + select / filtres / écritures, et `.rpc()`). État au **V0.19.0 : 6 écarts** (29 en V0.17.0, 22 en V0.18.0 ; le groupe C est porté par la migration 0013, `get_infra_stats` abandonné). Objectif : 0, puis ajouter ce contrôle à la CI (il demande PostgreSQL 16).
 
-## A. À retirer du côté 1 (données du côté 2 ou nominatives)
+## A. À retirer du côté 1 — FAIT en V0.19.0 sauf les colonnes de noms (données du côté 2 ou nominatives)
 | Écart | Où | Pourquoi |
 |---|---|---|
 | `employee_time_off` (table) | LiveCrew, WeekSnapshot, InventoryScreenshotsPanel, TodoInbox, missing-days | décidé 2026-11-14 : temps libre → côté 2 |

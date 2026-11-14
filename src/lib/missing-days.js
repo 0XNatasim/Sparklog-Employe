@@ -23,7 +23,7 @@ export async function loadMissingEntryDays({ employees, startDate, endDate }) {
   if (!ids.length || from > endDate) return missingEntryDays(employees, [], [], from, endDate);
   const [jobs, timeOff, holidays] = await Promise.all([
     fetchAll(() => supabase.from("jobs").select("user_id, job_date").in("user_id", ids).gte("job_date", from).lte("job_date", endDate).order("job_date")),
-    fetchAll(() => supabase.from("employee_time_off").select("user_id, kind, start_date, end_date, start_time, weekdays, exception_dates").in("user_id", ids).lte("start_date", endDate).or(`end_date.gte.${from},end_date.is.null`).order("start_date")),
+    Promise.resolve([]),
     loadHolidayDates(),
   ]);
   return missingEntryDays(employees, jobs, timeOff, from, endDate, holidays);

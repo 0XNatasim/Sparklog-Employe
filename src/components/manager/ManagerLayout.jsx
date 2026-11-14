@@ -14,8 +14,6 @@ import { useLanguage } from "@/components/language-provider";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/use-t";
 import { fetchInventoryNegativeAlerts, groupInventoryNegativeAlerts, INVENTORY_ALERTS_EVENT } from "@/lib/inventory-alerts";
-import { fetchPendingSignups, groupBadgeTotal, pendingSignupCount, SIGNUPS_EVENT } from "@/lib/signups";
-import { dueCount, fetchOpenReminders, fetchUnreadReplies, msUntilNextReminder, NOTES_EVENT, unreadNoteCount } from "@/lib/notes";
 import { fetchStockLevels, lowStockCount } from "@/lib/inventory-ratios";
 import { fetchTodoCount, TODO_EVENT } from "@/lib/todo-count";
 import { Badge } from "@/components/ui/badge";
@@ -29,8 +27,8 @@ import OfflineBanner from "@/components/OfflineBanner";
 import UpdateBanner from "@/components/UpdateBanner";
 import PushPrompt from "@/components/PushPrompt";
 import { PanelLoading } from "@/components/LazyLoading";
-import { useMissingScaleAlert, usePayrollRateAlerts, usePayrollRatesReady } from "@/lib/payroll-rates";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { groupBadgeTotal } from "@/lib/nav-badges";
 
 const COMPANY_NAME = "Messier Connexion";
 const COLLAPSE_KEY = "sparklog.managerNavCollapsed";
@@ -50,7 +48,6 @@ const ICONS = {
   live: Radio,
   messages: Megaphone,
   "advanced-audit": ScrollText,
-  "advanced-health": HeartPulse,
   "advanced-emergency": FilePlus2,
 };
 
@@ -274,23 +271,12 @@ export default function ManagerLayout() {
   const [collapsed, setCollapsed] = useState(() => readFlag(COLLAPSE_KEY));
   const [navHidden, setNavHidden] = useState(() => readFlag(HIDDEN_KEY));
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // Owner-edited payroll rates (0130) are installed before the first page computes anything.
-  const payrollRatesReady = usePayrollRatesReady();
-  const missingScale = useMissingScaleAlert();
-  const rateChangeCount = usePayrollRateAlerts().length + (missingScale ? 1 : 0);
   const [inventoryNegatives, setInventoryNegatives] = useState(0);
-  const [pendingSignups, setPendingSignups] = useState(0);
-  const [dueNotes, setDueNotes] = useState(0);
-  const [repliedNotes, setRepliedNotes] = useState(0);
   const [todoCount, setTodoCount] = useState(0);
   const badges = useMemo(() => ({
     todo: isManagerRole(role) ? todoCount : 0,
     inventory: isManagerRole(role) ? inventoryNegatives : 0,
-    "v3-team": isManagerRole(role) ? pendingSignups : 0,
-    notes: isManagerRole(role) ? dueNotes + repliedNotes : 0,
-    // A known payroll-rate change starts within 4 weeks (Configuration › Taux).
-    "v3-config": isManagerRole(role) ? rateChangeCount : 0,
-  }), [rateChangeCount, inventoryNegatives, pendingSignups, dueNotes, repliedNotes, todoCount, role]);
+  }), [inventoryNegatives, todoCount, role]);
 
   const activePath = location.pathname.replace(/^\/manager\/?/, "").replace(/\/+$/, "");
   const current = findNavItem(activePath);
@@ -334,29 +320,6 @@ export default function ManagerLayout() {
     };
   }, [role, location.pathname]);
 
-  // New sign-ups waiting for activation (email validated). Activating someone in Employés fires
-  // SIGNUPS_EVENT so the badge drops without a reload.
-  useEffect(() => {
-    if (!isManagerRole(role)) return undefined;
-    let cancelled = false;
-    let generation = 0;
-    async function loadSignups() {
-      const ticket = ++generation;
-      try {
-        const rows = await fetchPendingSignups();
-        if (!cancelled && ticket === generation) setPendingSignups(pendingSignupCount(rows));
-      } catch (error) {
-        console.error("[pending-signups]", error);
-      }
-    }
-    loadSignups();
-    window.addEventListener(SIGNUPS_EVENT, loadSignups);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(SIGNUPS_EVENT, loadSignups);
-    };
-  }, [role, location.pathname]);
-
   // « À traiter »: submitted jobs waiting for approval, a count-only request on each page change
   // and whenever the À traiter page reloads its list (TODO_EVENT).
   useEffect(() => {
@@ -379,53 +342,6 @@ export default function ManagerLayout() {
       window.removeEventListener(TODO_EVENT, loadTodo);
     };
   }, [role, location.pathname]);
-
-  // My due reminders (Notes): counted now, and again when the next reminder comes due (a timer),
-  // when the tab is shown again, and after any change on the Notes page (NOTES_EVENT). Shared notes with
-  // replies I have not seen yet (0118) count too, checked again every 2 minutes while the tab is shown.
-  useEffect(() => {
-    if (!isManagerRole(role)) return undefined;
-    let cancelled = false;
-    let generation = 0;
-    let timer = null;
-    async function loadReplies() {
-      if (document.hidden) return;
-      try {
-        const unread = await fetchUnreadReplies();
-        if (!cancelled) setRepliedNotes(unreadNoteCount(unread));
-      } catch (error) {
-        console.error("[notes] replies", error);
-      }
-    }
-    async function loadNotes() {
-      loadReplies();
-      const ticket = ++generation;
-      try {
-        const rows = await fetchOpenReminders();
-        if (cancelled || ticket !== generation) return;
-        const now = new Date();
-        setDueNotes(dueCount(rows, now));
-        clearTimeout(timer);
-        const wait = msUntilNextReminder(rows, now);
-        // At most 6 h: a long timer can drift while the computer sleeps.
-        if (wait !== null) timer = setTimeout(loadNotes, Math.min(wait + 1000, 6 * 60 * 60 * 1000));
-      } catch (error) {
-        console.error("[notes]", error);
-      }
-    }
-    const onVisible = () => { if (!document.hidden) loadNotes(); };
-    loadNotes();
-    const replyTimer = setInterval(loadReplies, 2 * 60 * 1000);
-    window.addEventListener(NOTES_EVENT, loadNotes);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      clearInterval(replyTimer);
-      window.removeEventListener(NOTES_EVENT, loadNotes);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [role]);
 
   function toggleCollapsed() {
     setCollapsed((value) => {
@@ -520,7 +436,7 @@ export default function ManagerLayout() {
             {/* A crashing page keeps the sidebar, so the manager can move on. */}
             <ErrorBoundary resetKey={location.pathname}>
               <Suspense fallback={<PanelLoading />}>
-                {payrollRatesReady ? <Outlet /> : <PanelLoading />}
+                <Outlet />
               </Suspense>
             </ErrorBoundary>
           </main>
