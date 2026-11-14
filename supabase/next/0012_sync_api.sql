@@ -179,14 +179,15 @@ begin
 end;
 $$;
 
-create function public.sync_jobs_deleted(p_client uuid, p_after timestamptz default null, p_limit integer default 500)
+create function public.sync_jobs_deleted(p_client uuid, p_after timestamptz default null, p_after_id uuid default null, p_limit integer default 500)
 returns table (job_id uuid, employee_number integer, job_date date, deleted_at timestamptz)
 language plpgsql security definer set search_path = '' as $$
 declare n integer;
 begin
   perform public.sync_require_client(p_client);
   return query select t.job_id, t.employee_number, t.job_date, t.deleted_at from public.job_tombstones t
-    where t.deleted_at > coalesce(p_after, '-infinity'::timestamptz) order by t.deleted_at, t.job_id limit least(greatest(coalesce(p_limit, 500), 1), 500);
+    where (t.deleted_at, t.job_id) > (coalesce(p_after, '-infinity'::timestamptz), coalesce(p_after_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    order by t.deleted_at, t.job_id limit least(greatest(coalesce(p_limit, 500), 1), 500);
   get diagnostics n = row_count;
   perform public.sync_log(p_client, 'jobs_deleted', n);
 end;
@@ -381,9 +382,9 @@ alter table public.job_tombstones enable row level security;   -- aucune politiq
 
 revoke all on function public.record_job_tombstone(), public.sync_random_token(integer), public.sync_create_client(text), public.sync_revoke_client(uuid),
   public.sync_authenticate(text), public.sync_require_client(uuid), public.sync_log(uuid, text, integer, text), public.sync_health(uuid),
-  public.sync_jobs_changed(uuid, timestamptz, uuid, integer), public.sync_jobs_deleted(uuid, timestamptz, integer), public.sync_job_ids(uuid, date, date),
+  public.sync_jobs_changed(uuid, timestamptz, uuid, integer), public.sync_jobs_deleted(uuid, timestamptz, uuid, integer), public.sync_job_ids(uuid, date, date),
   public.sync_employees(uuid), public.sync_claims_changed(uuid, timestamptz, uuid, integer), public.apply_sync_action(uuid, uuid, text, jsonb)
   from public, anon, authenticated;
 grant execute on function public.sync_create_client(text), public.sync_revoke_client(uuid), public.sync_authenticate(text), public.sync_health(uuid),
-  public.sync_jobs_changed(uuid, timestamptz, uuid, integer), public.sync_jobs_deleted(uuid, timestamptz, integer), public.sync_job_ids(uuid, date, date),
+  public.sync_jobs_changed(uuid, timestamptz, uuid, integer), public.sync_jobs_deleted(uuid, timestamptz, uuid, integer), public.sync_job_ids(uuid, date, date),
   public.sync_employees(uuid), public.sync_claims_changed(uuid, timestamptz, uuid, integer), public.apply_sync_action(uuid, uuid, text, jsonb) to service_role;

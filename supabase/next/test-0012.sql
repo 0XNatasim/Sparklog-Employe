@@ -107,10 +107,11 @@ end $$;
 set role service_role;
 select pg_temp.no_user();
 do $$ declare r record; ts timestamptz; begin
-  select * into r from public.sync_jobs_deleted(pg_temp.u('c2'), null, 10) limit 1;
+  select * into r from public.sync_jobs_deleted(pg_temp.u('c2'), null, null, 10) limit 1;
   assert r.employee_number = 3701 and r.job_date = pg_temp.d0() - 2, 'fiche supprimée annoncée au côté 2';
   ts := r.deleted_at;
-  assert (select count(*) from public.sync_jobs_deleted(pg_temp.u('c2'), ts, 10)) = 0, 'après le curseur : rien';
+  assert (select count(*) from public.sync_jobs_deleted(pg_temp.u('c2'), ts, r.job_id, 10)) = 0, 'après le curseur : rien';
+  assert (select count(*) from public.sync_jobs_deleted(pg_temp.u('c2'), ts, '00000000-0000-0000-0000-000000000000'::uuid, 10)) >= 1, 'curseur (date, identifiant) : à égalité de date, on reprend après l''identifiant';
   -- identifiants et versions d'une période
   assert (select count(*) from public.sync_job_ids(pg_temp.u('c2'), pg_temp.d0() - 3, pg_temp.d0())) >= 2, 'identifiants d''une période';
   begin perform * from public.sync_job_ids(pg_temp.u('c2'), pg_temp.d0() - 200, pg_temp.d0()); assert false, 'période trop longue'; exception when sqlstate '22023' then null; end;

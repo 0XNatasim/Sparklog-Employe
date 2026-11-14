@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.11.0
+# Sparklog-Employés (côté 1 : pointage) — V0.12.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.11.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.12.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -42,3 +42,5 @@ Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste de
 **V0.11.0 :** `supabase/next/0012_sync_api` : interface d'échange avec le côté 2 (clients à secret haché, blocage après échecs, lecture par curseur par numéro d'employé, suppressions, `apply_sync_action` idempotente avec codes d'activation jamais conservés), avec test SQL.
 
 Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`.
+
+**V0.12.0 :** fonction Edge `pointage_api` (porte HTTP du côté 2 : authentification par secret, routes de lecture par curseur, `/actions` idempotente, erreurs sans texte SQL), `src/lib/pointage-api.test.js` (24 tests) et contrat dans `docs/api-cote2.md` ; `sync_jobs_deleted` passe à un curseur `(deleted_at, job_id)` (migration 0012 corrigée, pas encore appliquée à une base).
