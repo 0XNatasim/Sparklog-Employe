@@ -1,4 +1,4 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.25.0
+# Sparklog-Employés (côté 1 : pointage) — V0.26.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
@@ -73,4 +73,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 
 **V0.24.2 :** décision de la propriétaire : **OCR.space est gardé pour l'instant** ; Tesseract est noté dans `docs/ocr-tesseract.md` (résultat de l'essai, limites, essai à compléter, plan de travail si on change). Aucun code changé.
 
+**V0.26.0 :** pour la gestion (côté 2). Migration `0015_sync_actions_export` : `apply_sync_action` accepte quatre actions de plus (`set_role` : changer le rôle d'un compte sauf gestionnaire ; `publish_announcement`, `edit_announcement` avec contrôle de version, `withdraw_announcement`), toutes rejouables et écrites au journal sans nom ; `export_jobs_for_import(du, au, statuts)` (gestionnaire avec double authentification, 366 jours et 50 000 fiches au plus, écrit au journal). Bouton « Exporter les fiches (CSV) » (`JobsCsvExport.jsx`, `src/lib/jobs-csv.js` : séparateur `;`, protection contre les formules) : plan de secours de la synchronisation. `pointage_api` : 12 types d'actions. Pas de `set_employee_number` : le numéro est attribué par la gestion à `register_account`. Aperçu SQL régénéré.
 **V0.25.0 :** boutons d'**approbation retirés** de la boîte « À traiter » (`TodoInbox`) et du tableau de bord (`ManagerDashboard` : approuver une fiche, approuver la semaine) : ils appelaient `push_approved_batch`, qui n'existe pas au côté 1 (l'approbation vient du côté 2, `approve_jobs`). Message « L'approbation se fait dans la gestion » ; `approvalOutcome` et 48 textes devenus inutiles retirés. Garde-fou `src/lib/side-boundaries.test.js` : le code du côté 1 n'appelle ni approbation, ni paie, ni API d'échange, ni clé de service. `docs/pret-deploiement.md` : état de préparation (prêt pour l'aperçu, pas pour la mise en service) et bloquants.
