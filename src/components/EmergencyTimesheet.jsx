@@ -22,7 +22,6 @@ import {
   validateManagerEntry,
 } from "@/lib/manager-entry";
 import { QUERY_BUDGETS } from "@/lib/query-budgets";
-import { notifyBroadcastPush, pushOutcome } from "@/lib/push";
 import { formatHM, hoursBetween } from "@/lib/time";
 import { useT } from "@/lib/use-t";
 import { extractWorkOrderText, parseExtractedText } from "@/lib/work-order-ocr";
@@ -130,20 +129,13 @@ export default function EmergencyTimesheet() {
     busyRef.current = true;
     setBusy(true);
     try {
-      const { data, error: rpcError } = await withRetry(
+      const { error: rpcError } = await withRetry(
         () => supabase.rpc("create_job_for_employee", buildCreateJobForEmployeeArgs(form, submissionKeyRef.current)).single(),
         12000
       );
       if (rpcError) throw rpcError;
-      // Phone push (the entry and its in-app message are saved either way); a refusal is said, not hidden.
-      if (form.submit) {
-        setInfo(t("emergency.createdSubmitted", { name: employeeName }));
-      } else {
-        const push = data?.broadcast_id ? pushOutcome(await notifyBroadcastPush(data.broadcast_id)) : null;
-        setInfo(push?.tone === "warning"
-          ? `${t("emergency.created", { name: employeeName })} ${t(push.key, push.params)}`
-          : t("emergency.created", { name: employeeName }));
-      }
+      // L'employé est avisé dans l'application (`employee_notices`, 0005) ; la notification téléphone générique viendra du côté 2.
+      setInfo(t(form.submit ? "emergency.createdSubmitted" : "emergency.created", { name: employeeName }));
       setForm({ ...EMPTY_FORM, jobDate: companyDate() });
       setShowErrors(false);
       submissionKeyRef.current = crypto.randomUUID();

@@ -5,12 +5,14 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const schema = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const root = new URL("../src", import.meta.url).pathname;
+const root = new URL("..", import.meta.url).pathname;
+// Code de l'application (src/) ET des fonctions Edge (supabase/functions/) : les deux parlent à la même base.
 const files = (dir) => readdirSync(dir).flatMap((n) => {
   const p = join(dir, n);
   if (statSync(p).isDirectory()) return files(p);
-  return /\.jsx?$/.test(n) && !/\.test\./.test(n) ? [p] : [];
+  return /\.(jsx?|ts)$/.test(n) && !/\.test\./.test(n) ? [p] : [];
 });
+const sources = [...files(join(root, "src")), ...files(join(root, "supabase/functions"))];
 
 const issues = new Map(); // clé → Set(fichiers)
 const add = (key, file) => { if (!issues.has(key)) issues.set(key, new Set()); issues.get(key).add(file); };
@@ -25,13 +27,14 @@ function splitTop(list) { // coupe sur les virgules hors parenthèses
   return out;
 }
 
-for (const file of files(root)) {
+for (const file of sources) {
   const rel = relative(root, file);
   const text = readFileSync(file, "utf8");
   for (const m of text.matchAll(/\.rpc\(\s*["'`](\w+)["'`]/g)) if (!schema.functions.includes(m[1])) add(`rpc manquante : ${m[1]}`, rel);
   for (const m of text.matchAll(/\.from\(\s*["'`](\w+)["'`]\s*\)/g)) {
     const table = m[1];
     if (/^(sparklog|storage)/.test(table)) continue;
+    if (/storage\s*$/.test(text.slice(Math.max(0, m.index - 12), m.index))) continue; // storage.from("compartiment")
     const cols = schema.columns[table];
     if (!cols) { add(`table manquante : ${table}`, rel); continue; }
     // la chaîne : jusqu'à la fin de l'instruction (; ou ligne vide), bornée à 900 caractères
@@ -47,8 +50,16 @@ for (const file of files(root)) {
       }
     }
     for (const s of chain.matchAll(/\.(?:eq|neq|gt|gte|lt|lte|is|in|order|like|ilike|not|contains)\(\s*["'`](\w+)["'`]/g)) wanted.add(s[1]);
-    for (const s of chain.matchAll(/\.(?:insert|update|upsert)\(\s*\{([^}]*)\}/g)) {
-      for (const k of s[1].matchAll(/(?:^|,)\s*(\w+)\s*(?::|,|$)/g)) wanted.add(k[1]);
+    // Clés de premier niveau de l'objet écrit (les objets imbriqués, ex. `details: { … }` d'une colonne jsonb, sont ignorés).
+    for (const s of chain.matchAll(/\.(?:insert|update|upsert)\(\s*\{/g)) {
+      let depth = 1, i = s.index + s[0].length, top = "";
+      for (; i < chain.length && depth > 0; i++) {
+        const ch = chain[i];
+        if (ch === "{" || ch === "[" || ch === "(") depth++;
+        else if (ch === "}" || ch === "]" || ch === ")") depth--;
+        if (depth === 1) top += ch;
+      }
+      for (const k of top.matchAll(/(?:^|,)\s*(\w+)\s*(?::|,|$)/g)) wanted.add(k[1]);
     }
     for (const c of wanted) if (!cols.includes(c)) add(`colonne manquante : ${table}.${c}`, rel);
   }

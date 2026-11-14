@@ -402,8 +402,8 @@ Livrable : un CSV de test importé deux fois = aucun doublon ; une ligne invalid
 **Objectif.** Le côté 2 calcule heures, avantages, retenues et talons exactement comme Sparklog aujourd'hui.
 
 **Décision D3 (à fermer au début de l'étape) :**
-- **Option A (recommandée par OFFICIEL.md)** : le côté 2 appelle `classify_week` du côté 1 pour le **classement des heures** et calcule les **montants** lui-même. Une seule source pour les règles d'heures.
-- **Option B** : copie versionnée de `payroll_engine.js` avec les mêmes fixtures. Plus autonome (marche si le côté 1 est tombé), plus risquée (divergence).
+- **Option A (impossible depuis V0.22.0, voir D3 ci-dessous)** : le côté 2 appelle `classify_week` du côté 1 pour le **classement des heures** et calcule les **montants** lui-même. Une seule source pour les règles d'heures.
+- **Option B (retenue de fait)** : copie versionnée de `payroll_engine.js` avec les mêmes fixtures. Plus autonome (marche si le côté 1 est tombé), plus risquée (divergence).
 
 Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le côté 1 après l'étape 10) et l'**option A ou B pour les heures**, selon D3.
 

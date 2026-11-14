@@ -9,7 +9,7 @@ const read = (path) => readFileSync(new URL(path, root), "utf8");
 describe("fichier d'aperçu du schéma", () => {
   it("contient chaque migration de supabase/next/ dans l'ordre, et aucun test", () => {
     const files = readdirSync(new URL("supabase/next/", root)).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
-    expect(files.length).toBeGreaterThanOrEqual(13);
+    expect(files.length).toBeGreaterThanOrEqual(14);
     const header = [
       "-- Sparklog-Employés : schéma complet du côté 1 (généré par scripts/build-preview-sql.sh ; ne pas modifier à la main).",
       "-- À coller UNE SEULE FOIS dans l'éditeur SQL d'un projet Supabase VIERGE de test (docs/mode-emploi-apercu.md).",

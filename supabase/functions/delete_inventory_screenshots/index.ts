@@ -59,17 +59,18 @@ Deno.serve(async (req) => {
     .eq("user_id", userId).eq("job_date", jobDate).in("slot", slots);
   if (rowsError) return json({ ok: false, error: rowsError.message }, 500);
 
+  // Journal par NUMÉROS d'employé, sans nom (invariant I1) ; le journal n'accepte que des clés de détail fixes (0005 : job_date, count…).
   const [{ data: actor }, { data: target }] = await Promise.all([
-    admin.from("profiles").select("full_name").eq("id", userData.user.id).maybeSingle(),
-    admin.from("profiles").select("full_name").eq("id", userId).maybeSingle(),
+    admin.from("profiles").select("employee_number").eq("id", userData.user.id).maybeSingle(),
+    admin.from("profiles").select("employee_number").eq("id", userId).maybeSingle(),
   ]);
   await admin.from("audit_log").insert({
     actor_id: userData.user.id,
-    actor_name: actor?.full_name ?? null,
+    actor_number: actor?.employee_number ?? null,
     action: "inventory_deleted",
     target_user_id: userId,
-    target_name: target?.full_name ?? null,
-    details: { job_date: jobDate, slots, count: rows.length },
+    target_number: target?.employee_number ?? null,
+    details: { job_date: jobDate, count: rows.length },
   });
 
   return json({ ok: true, deleted: rows.length });

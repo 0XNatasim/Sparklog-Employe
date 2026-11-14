@@ -9,15 +9,9 @@ Deno.serve(async (req) => {
   const authorization = req.headers.get("authorization") || "";
   if (!supabaseUrl || !serviceRole) return json({ ok: false, error: "Unauthorized" }, 401);
   const admin = createClient(supabaseUrl, serviceRole);
-  // Manual run: service-role Bearer. Scheduled run (pg_cron, migration 0094): x-cron-secret
-  // checked against Vault.
-  if (authorization !== `Bearer ${serviceRole}`) {
-    const cronSecret = req.headers.get("x-cron-secret") || "";
-    const { data: allowed } = cronSecret
-      ? await admin.rpc("verify_cron_secret", { p_secret: cronSecret })
-      : { data: false };
-    if (allowed !== true) return json({ ok: false, error: "Unauthorized" }, 401);
-  }
+  // Réservée à la clé de service : l'ordonnanceur du serveur (cron système) l'appelle avec `Authorization: Bearer <clé de service>`.
+  // Pas de pg_cron ni de Vault dans la base du côté 1 (`docs/schema-cote1.md`, 0014).
+  if (authorization !== `Bearer ${serviceRole}`) return json({ ok: false, error: "Unauthorized" }, 401);
 
   const failures: Array<{ phase: string; detail: string }> = [];
   // A picture that is gone no longer needs its « already downloaded » mark (0126).

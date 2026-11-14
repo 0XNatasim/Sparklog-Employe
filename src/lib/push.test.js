@@ -65,11 +65,13 @@ describe("push wiring invariants", () => {
     expect(migration).toMatch(/is_active_employee\(\)/);
   });
 
-  it("send_push requires a manager and a broadcast the caller sent (or last edited, for a correction)", () => {
+  it("send_push is called by side 2 with its exchange secret, has no CORS and keeps its delivery bounded", () => {
     const fn = read("../../supabase/functions/send_push/index.ts");
-    expect(fn).toMatch(/\["manager", "admin", "owner"\]\.includes/);
-    expect(fn).toMatch(/if \(!canPushBroadcast\(broadcast, callerUser\.user\.id, \{ reread \}\)\) return json\(\{ ok: false, error: "Forbidden" \}, 403\)/);
+    expect(fn).toContain('rpc("sync_authenticate"');
+    expect(fn).toContain("verify_jwt = false");
     expect(fn).toMatch(/AbortSignal\.timeout/);
+    expect(fn).not.toMatch(/Access-Control/i);
+    expect(fn).not.toMatch(/manager_broadcasts|broadcast_recipients/);
   });
 
   it("the service worker imports the push handlers", () => {

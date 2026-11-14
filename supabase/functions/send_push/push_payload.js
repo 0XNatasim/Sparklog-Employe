@@ -8,7 +8,7 @@ export function truncate(text, max = MAX_BODY_CHARS) {
   return chars.length <= max ? chars.join("") : `${chars.slice(0, max - 1).join("")}…`;
 }
 
-// Payload read by public/push-sw.js. `tag` collapses repeats of the same broadcast.
+// Payload read by public/push-sw.js. `tag` collapses repeats of the same announcement.
 // `badge` is the recipient's unread count, shown on the app icon (Badging API).
 export function buildPushPayload({ title, body, url = "/", tag, badge }) {
   return JSON.stringify({
@@ -25,17 +25,6 @@ export function isGonePushStatus(status) {
   return status === 404 || status === 410;
 }
 
-// A message edited with « read it again » (migration 0107) is pushed again to the recipients who have
-// not pressed OK, with a prefix so the phone shows it is a correction, not a new message.
-export const REREAD_PREFIX = "Message modifié : ";
-export function pushBodyFor(body, { reread = false } = {}) {
-  if (!reread) return body ?? "";
-  return `${REREAD_PREFIX}${String(body ?? "").trim() || "pièce jointe"}`;
-}
-
-// Only the sender pushes a new message; only the manager who last edited it pushes the correction
-// (prevents replaying someone else's broadcast).
-export function canPushBroadcast(broadcast, callerId, { reread = false } = {}) {
-  if (!broadcast || !callerId) return false;
-  return reread ? broadcast.edited_by === callerId : broadcast.sender_id === callerId;
-}
+// Textes de la notification : toujours génériques (jamais le contenu de l'annonce, un nom, une heure ni un montant).
+export const GENERIC_BODY = "Nouveau message";
+export const GENERIC_REREAD_BODY = "Message modifié";
