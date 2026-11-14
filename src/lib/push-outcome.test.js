@@ -63,7 +63,7 @@ describe("phone push outcome (V2.4.172)", () => {
     const auth = read("../contexts/AuthProvider.jsx");
     expect(auth).toContain('supabase.auth.signOut({ scope: "local" }),');
     expect(auth).not.toMatch(/supabase\.auth\.signOut\(\)/);
-    for (const file of ["../components/manager/TodoInbox.jsx", "../components/EmergencyTimesheet.jsx"]) {
+    for (const file of ["../components/EmergencyTimesheet.jsx"]) {
       const src = read(file);
       expect(src, file).toContain("pushOutcome(");
       expect(src, file).not.toMatch(/notifyBroadcastPush\([^)]*\);\s*\/\/ phone push, best-effort/);

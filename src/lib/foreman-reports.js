@@ -8,25 +8,33 @@ import { employeeLabel } from "@/lib/employee-label";
 // the job is returned for correction); the managers read, delete and export the notes in Notes › Contremaître.
 export const FOREMAN_OT_LABEL = "CONTREMAÎTRE";
 export const MAX_REPORT = 5000;
-export const MAX_AUDITED_NAME = 120;
+export const AUDITED_NUMBER_MIN = 1000;
+export const AUDITED_NUMBER_MAX = 999999;
 
 // True when the work order text is the « CONTREMAÎTRE » choice (case and spaces ignored, like any preset).
 export const isForemanOt = (ot) => Boolean(matchPreset(ot, [FOREMAN_OT_LABEL]));
 
 const tidy = (value) => String(value ?? "").replace(/[ \t]+/g, " ").trim();
 
-// The report as stored, or null when the table would refuse it (empty or too long text / name).
-export function cleanReport({ auditedName, body }) {
+// The report as stored, or null when the table would refuse it (empty or too long text, or an audited number that is not an employee number).
+// The audited employee is a NUMBER (never a name, invariant I1): 4 to 6 digits between 1000 and 999999, or nothing.
+export function cleanReport({ auditedNumber, body }) {
   const text = String(body ?? "").replace(/\r\n/g, "\n").trim();
-  const name = tidy(auditedName);
-  if (!text || text.length > MAX_REPORT || name.length > MAX_AUDITED_NAME) return null;
-  return { auditedName: name || null, body: text };
+  const raw = tidy(auditedNumber).replace(/\s/g, "");
+  let number = null;
+  if (raw !== "") {
+    if (!/^\d{4,6}$/.test(raw)) return null;
+    number = Number(raw);
+    if (number < AUDITED_NUMBER_MIN || number > AUDITED_NUMBER_MAX) return null;
+  }
+  if (!text || text.length > MAX_REPORT) return null;
+  return { auditedNumber: number, body: text };
 }
 
 // Attaches the note to its job: one note per job, created the first time and edited afterwards. `submissionKey` is
 // created once per note, so a retry after a lost response is the same note, not a second one.
-export async function saveJobNote(client, { userId, jobId, submissionKey, reportDate, auditedName, body }) {
-  const clean = cleanReport({ auditedName, body });
+export async function saveJobNote(client, { userId, jobId, submissionKey, reportDate, auditedNumber, body }) {
+  const clean = cleanReport({ auditedNumber, body });
   if (!clean || !userId || !jobId || !submissionKey || !reportDate) throw new Error("foreman_report_invalid");
   const { data: existing, error: readError } = await withTimeout(
     client.from("foreman_reports").select("id").eq("job_id", jobId).maybeSingle(),
@@ -35,7 +43,7 @@ export async function saveJobNote(client, { userId, jobId, submissionKey, report
   if (readError) throw readError;
   if (existing?.id) {
     const { error } = await withTimeout(
-      client.from("foreman_reports").update({ audited_name: clean.auditedName, body: clean.body }).eq("id", existing.id),
+      client.from("foreman_reports").update({ audited_employee_number: clean.auditedNumber, body: clean.body }).eq("id", existing.id),
       12000,
     );
     if (error) throw error;
@@ -47,7 +55,7 @@ export async function saveJobNote(client, { userId, jobId, submissionKey, report
       job_id: jobId,
       submission_key: submissionKey,
       report_date: reportDate,
-      audited_name: clean.auditedName,
+      audited_employee_number: clean.auditedNumber,
       body: clean.body,
     }),
     12000,
@@ -58,11 +66,11 @@ export async function saveJobNote(client, { userId, jobId, submissionKey, report
 // The note of a job (to edit it from the work sheet), or null.
 export async function fetchJobNote(client, jobId) {
   const { data, error } = await withTimeout(
-    client.from("foreman_reports").select("audited_name, body").eq("job_id", jobId).maybeSingle(),
+    client.from("foreman_reports").select("audited_employee_number, body").eq("job_id", jobId).maybeSingle(),
     12000,
   );
   if (error) throw error;
-  return data ? { auditedName: data.audited_name || "", body: data.body || "" } : null;
+  return data ? { auditedNumber: data.audited_employee_number == null ? "" : String(data.audited_employee_number), body: data.body || "" } : null;
 }
 
 // A manager deletes a note on its own (the job stays).
@@ -94,7 +102,7 @@ export const isNoteReturned = (note, jobStatus) => Boolean(note?.returned_at) &&
 export async function fetchForemanReports(client) {
   const { data, error } = await withTimeout(
     client.from("foreman_reports")
-      .select("id, user_id, job_id, report_date, audited_name, body, created_at, updated_at, returned_at, returned_by_name, return_reason, job:jobs(id, ot, job_date, depart, fin, status, updated_at)")
+      .select("id, user_id, job_id, report_date, audited_employee_number, body, created_at, updated_at, returned_at, return_reason, job:jobs(id, ot, job_date, depart, fin, status, updated_at)")
       .order("created_at", { ascending: false })
       .limit(QUERY_BUDGETS.foremanReports),
     12000,
@@ -115,7 +123,7 @@ const fold = (value) => String(value ?? "").normalize("NFD").replace(/[̀-ͯ]/g,
 export function filterReports(reports, query) {
   const needle = fold(query).trim();
   if (!needle) return reports;
-  return (reports || []).filter((report) => fold(`${report.author} ${report.audited_name} ${report.body} ${report.job?.ot ?? ""}`).includes(needle));
+  return (reports || []).filter((report) => fold(`${report.author} ${report.audited_employee_number ?? ""} ${report.body} ${report.job?.ot ?? ""}`).includes(needle));
 }
 
 const csvCell = (value) => {
@@ -138,7 +146,7 @@ export function foremanReportsCsv(reports, labels) {
       job?.job_date ?? report.report_date ?? "",
       job?.depart && job?.fin ? `${String(job.depart).slice(0, 5)}-${String(job.fin).slice(0, 5)}` : "",
       job ? (labels.status[job.status] || job.status) : "",
-      report.audited_name,
+      report.audited_employee_number == null ? "" : `#${report.audited_employee_number}`,
       report.body,
     ].map(csvCell).join(";"));
   }

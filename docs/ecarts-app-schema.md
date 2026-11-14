@@ -1,6 +1,6 @@
 # Écarts entre l'application (`src/`) et le schéma neuf (`supabase/next/`)
 
-Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh && node scripts/check-app-against-schema.mjs /tmp/schema.json` (analyse statique approximative : `.from()` + select / filtres / écritures, et `.rpc()`). État au **V0.19.0 : 6 écarts** (29 en V0.17.0, 22 en V0.18.0 ; le groupe C est porté par la migration 0013, `get_infra_stats` abandonné). Objectif : 0, puis ajouter ce contrôle à la CI (il demande PostgreSQL 16).
+Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh && node scripts/check-app-against-schema.mjs /tmp/schema.json` (analyse statique approximative : `.from()` + select / filtres / écritures, et `.rpc()`). État au **V0.20.0 : 0 écart** (29 en V0.17.0, 22 en V0.18.0, 6 en V0.19.0 ; le groupe C est porté par la migration 0013, `get_infra_stats` abandonné). Objectif : 0, puis ajouter ce contrôle à la CI (il demande PostgreSQL 16).
 
 ## A. À retirer du côté 1 — FAIT en V0.19.0 sauf les colonnes de noms (données du côté 2 ou nominatives)
 | Écart | Où | Pourquoi |
@@ -12,7 +12,7 @@ Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh 
 | `profiles.start_date`, `apprentice_level`, `departure_status` | LiveCrew, WeekSnapshot, TodoInbox, InventoryScreenshotsPanel, EmployeeActivityLog, MissingDaysPanel | dates d'embauche, niveau, départ : côté 2 |
 | `employee_activity_log.user_name`, `jobs.manager_entry_by_name`, `foreman_reports.returned_by_name` | EmployeeActivityLog, EmergencyTimesheet, foreman-reports | noms : remplacés par le numéro (`employeeLabel`) |
 
-## B. À adapter (existe sous un autre nom)
+## B. À adapter (existe sous un autre nom) — FAIT en V0.20.0
 | Ancien | Nouveau (schéma neuf) |
 |---|---|
 | `foreman_reports.audited_name` (texte libre) | `audited_employee_number` (numéro) — saisie par numéro |

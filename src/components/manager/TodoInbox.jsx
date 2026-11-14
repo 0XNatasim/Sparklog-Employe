@@ -22,7 +22,6 @@ import { approvalOutcome, buildInbox, lookbackWorkdays } from "@/lib/todo-inbox"
 import { loadHolidayDates } from "@/lib/company-holidays";
 import { DYNACOM_CUMULATIVE_END } from "@/lib/payroll-opening";
 import { TODO_EVENT } from "@/lib/todo-count";
-import { notifyBroadcastPush, pushOutcome } from "@/lib/push";
 import { dailyRegularMinutesFor, getKilometreBreakdown } from "@/lib/payroll-calculations";
 import { mealBreakdownText, mealDayBreakdown } from "@/lib/meal-eligibility";
 import { loadManualEntryJobIds } from "@/lib/entry-source";
@@ -48,7 +47,7 @@ const money = (value) => `${(Number(value) || 0).toLocaleString("fr-CA", { minim
 const hm = (minutes) => formatHM((Number(minutes) || 0) / 60);
 
 // Équipe en direct › V3 « À traiter »: one page for the daily decisions — approve days,
-// review the proof / supper / parking attached to them, return a day, remind or unlock the
+// review the proof / supper / parking attached to them, return a day or unlock the
 // people who did not submit. Uses the same server calls as Feuilles de temps and Reçus.
 export default function TodoInbox() {
   const t = useT();
@@ -306,26 +305,6 @@ export default function TodoInbox() {
     setImage({ title, urls });
   }
 
-  async function remind(people) {
-    if (!people.length) return;
-    const ok = await confirm(t("todo.confirm.remind", { names: people.map((p) => p.name).join(", ") }));
-    if (!ok) return;
-    await run(`remind:${people.map((p) => p.id).join(",")}`, async () => {
-      const { data: created, error } = await supabase
-        .from("manager_broadcasts")
-        .insert({ sender_id: user?.id, body: t("todo.reminderBody", { date: dayjs(state.prevDay).format("dddd D MMMM") }), audience: "selected", image_path: null })
-        .select("id")
-        .single();
-      if (error) throw error;
-      const { error: recipError } = await supabase.from("broadcast_recipients").insert(people.map((p) => ({ broadcast_id: created.id, employee_id: p.id })));
-      if (recipError) throw recipError;
-      const push = pushOutcome(await notifyBroadcastPush(created.id)); // the reminder is saved either way
-      setInfo(push?.tone === "warning"
-        ? `${t("todo.toast.reminded", { count: people.length })} ${t(push.key, push.params)}`
-        : t("todo.toast.reminded", { count: people.length }));
-    });
-  }
-
   function unlockDay(person) {
     return run(`unlock:${person.id}`, async () => {
       const { error } = await supabase
@@ -442,9 +421,6 @@ export default function TodoInbox() {
           <Button type="button" variant="outline" onClick={refresh} disabled={loading || Boolean(busy)}>
             <RefreshCw className="mr-1.5 h-4 w-4" /> {t("todo.refresh")}
           </Button>
-          {missing.length > 0 && (
-            <Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => remind(missing)}>{t("todo.remindAll", { count: missing.length })}</Button>
-          )}
           <Button type="button" disabled={!stats?.cleanDays || Boolean(busy)} onClick={approveAllClean}>
             <CheckCheck className="mr-1.5 h-4 w-4" />
             {busy === "all" ? t("common.working") : t("todo.approveAllClean", { count: stats?.cleanDays || 0 })}
@@ -536,7 +512,6 @@ export default function TodoInbox() {
                 <Link to={`/manager/v3/time?tab=timesheets&emp=${person.id}&date=${state.prevDay}`} className="font-semibold text-primary hover:underline">{person.name}</Link>
                 <div className="text-xs text-muted-foreground">{t(person.hasJobs ? "todo.missingSaved" : "todo.missingNoJob")}</div>
                 <div className="flex flex-wrap gap-1.5">
-                  <Button type="button" size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => remind([person])}>{t("todo.remind")}</Button>
                   <Button type="button" size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => unlockDay(person)}>{t("todo.unlock")}</Button>
                 </div>
               </div>

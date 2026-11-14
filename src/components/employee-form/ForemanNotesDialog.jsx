@@ -3,7 +3,7 @@ import { ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MAX_AUDITED_NAME, MAX_REPORT, cleanReport } from "@/lib/foreman-reports";
+import { MAX_REPORT, cleanReport } from "@/lib/foreman-reports";
 
 const textareaClass = "min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-base leading-relaxed shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -22,9 +22,9 @@ export default function ForemanNotesDialog({ t, open, onOpenChange, note, onSave
 }
 
 function ForemanNotesForm({ t, note, onSave, onClose }) {
-  const [auditedName, setAuditedName] = useState(note?.auditedName || "");
+  const [auditedNumber, setAuditedNumber] = useState(note?.auditedNumber || "");
   const [body, setBody] = useState(note?.body || "");
-  const clean = cleanReport({ auditedName, body });
+  const clean = cleanReport({ auditedNumber, body });
   // An emptied text removes the note that was not sent yet; a note already on the job is edited, not removed.
   const canSave = Boolean(clean);
 
@@ -37,7 +37,7 @@ function ForemanNotesForm({ t, note, onSave, onClose }) {
       <div className="space-y-3">
         <label className="block space-y-1 text-sm font-medium">
           <span>{t("foremanNotes.audited")}</span>
-          <Input value={auditedName} maxLength={MAX_AUDITED_NAME} placeholder={t("foremanNotes.auditedPlaceholder")} onChange={(e) => setAuditedName(e.target.value)} />
+          <Input value={auditedNumber} maxLength={6} inputMode="numeric" placeholder={t("foremanNotes.auditedPlaceholder")} onChange={(e) => setAuditedNumber(e.target.value)} />
         </label>
         <label className="block space-y-1 text-sm font-medium">
           <span>{t("foremanNotes.report")}</span>
@@ -46,7 +46,7 @@ function ForemanNotesForm({ t, note, onSave, onClose }) {
       </div>
       <DialogFooter className="gap-2 sm:gap-0">
         <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
-        <Button type="button" disabled={!canSave} onClick={() => { onSave({ auditedName: clean.auditedName || "", body: clean.body }); onClose(); }}>{t("foremanNotes.attach")}</Button>
+        <Button type="button" disabled={!canSave} onClick={() => { onSave({ auditedNumber: clean.auditedNumber == null ? "" : String(clean.auditedNumber), body: clean.body }); onClose(); }}>{t("foremanNotes.attach")}</Button>
       </DialogFooter>
     </>
   );

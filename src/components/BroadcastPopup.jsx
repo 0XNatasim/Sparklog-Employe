@@ -7,6 +7,7 @@ import { BROADCASTS_REFRESH_EVENT } from "@/components/EmployeeNotificationsBell
 import { Button } from "@/components/ui/button";
 import BroadcastAttachments, { EditedTag } from "@/components/BroadcastAttachments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { acknowledgeAnnouncement, fetchMyAnnouncements } from "@/lib/announcements";
 
 // Shows unacknowledged manager broadcasts to the signed-in user, one at a time.
 // Re-queries on mount (every page open/reload), so a notification keeps popping
@@ -23,11 +24,7 @@ export default function BroadcastPopup() {
     if (!user?.id) return undefined;
     let cancelled = false;
     const load = async () => {
-      const { data } = await supabase
-        .from("broadcast_recipients")
-        .select("broadcast_id, acknowledged_at, manager_broadcasts(body, created_at, image_path, attachments, edited_at)")
-        .eq("employee_id", user.id)
-        .is("acknowledged_at", null);
+      const data = await fetchMyAnnouncements(supabase, user.id, { unreadOnly: true });
       if (cancelled) return;
       const rows = (data || [])
         .filter((r) => r.manager_broadcasts)
@@ -49,11 +46,7 @@ export default function BroadcastPopup() {
   async function acknowledge() {
     if (!current || !user?.id) return;
     setBusy(true);
-    const { error } = await supabase
-      .from("broadcast_recipients")
-      .update({ acknowledged_at: new Date().toISOString() })
-      .eq("broadcast_id", current.broadcast_id)
-      .eq("employee_id", user.id);
+    const { error } = await acknowledgeAnnouncement(supabase, user.id, current.broadcast_id);
     setBusy(false);
     if (!error) setLoaded((current) => ({ ...current, rows: current.rows.slice(1) }));
   }

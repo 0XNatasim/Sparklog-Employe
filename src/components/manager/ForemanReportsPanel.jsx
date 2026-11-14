@@ -138,12 +138,12 @@ export default function ForemanReportsPanel() {
               {report.returned_at && (
                 <div className={`rounded-md border px-3 py-2 text-sm ${isNoteReturned(report, job?.status) ? "border-warning/40 bg-warning/10 text-warning" : "border-muted bg-muted/40 text-muted-foreground"}`} role="status">
                   <div className="font-semibold">
-                    {t(isNoteReturned(report, job?.status) ? "foremanNotes.returnedNow" : "foremanNotes.returnedBefore", { name: report.returned_by_name || "—", date: dayjs(report.returned_at).format("D MMM HH:mm") })}
+                    {t(isNoteReturned(report, job?.status) ? "foremanNotes.returnedNow" : "foremanNotes.returnedBefore", { date: dayjs(report.returned_at).format("D MMM HH:mm") })}
                   </div>
                   {report.return_reason && <p className="mt-1 whitespace-pre-wrap">{t("foremanNotes.returnReasonShown", { reason: report.return_reason })}</p>}
                 </div>
               )}
-              {report.audited_name && <div className="text-sm"><span className="text-muted-foreground">{t("foremanNotes.audited")} : </span><b>{report.audited_name}</b></div>}
+              {report.audited_employee_number != null && <div className="text-sm"><span className="text-muted-foreground">{t("foremanNotes.audited")} : </span><b>#{report.audited_employee_number}</b></div>}
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{report.body}</p>
               <div className="flex flex-wrap justify-end gap-2">
                 {isNoteUnread(report, reads.get(report.id)) && (

@@ -18,3 +18,21 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  # Contrôle app ↔ schéma neuf : applique supabase/next/ sur un PostgreSQL jetable, lance les tests SQL, puis compare les tables, colonnes et fonctions
+  # appelées par src/ à cette structure (docs/ecarts-app-schema.md). Échoue au premier écart.
+  schema:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: PostgreSQL 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+      - name: Tests SQL du schéma neuf
+        run: sudo DUMP_SCHEMA=/tmp/schema.json ./scripts/test-next-schema.sh
+      - name: Écarts app ↔ schéma
+        run: node scripts/check-app-against-schema.mjs /tmp/schema.json

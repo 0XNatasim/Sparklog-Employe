@@ -22,18 +22,18 @@ describe("JobCard foreman note", () => {
   });
 
   it("opens the note from the icon", () => {
-    render(<JobCard {...props} foremanNote={{ audited_name: "Paul Roy", body: "Casque oublié" }} />);
+    render(<JobCard {...props} foremanNote={{ audited_employee_number: 4821, body: "Casque oublié" }} />);
     fireEvent.click(screen.getByRole("button", { name: fr("foremanNotes.cardIcon") }));
     expect(screen.getByText("Casque oublié")).toBeTruthy();
-    expect(screen.getByText("Paul Roy")).toBeTruthy();
+    expect(screen.getByText("#4821")).toBeTruthy();
   });
 
   it("tells the managers a returned sheet was returned, until it is submitted again", () => {
-    const returned = { audited_name: null, body: "x", returned_at: "2026-11-11T15:00:00Z", returned_by_name: "Marie", return_reason: "Date à vérifier" };
+    const returned = { audited_employee_number: null, body: "x", returned_at: "2026-11-11T15:00:00Z", return_reason: "Date à vérifier" };
     render(<JobCard {...props} job={{ ...job, status: "updated" }} foremanNote={returned} />);
     expect(screen.getByText(fr("foremanNotes.returnedBadge"))).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: fr("foremanNotes.cardIcon") }));
-    expect(screen.getByText(/Retournée par Marie/)).toBeTruthy();
+    expect(screen.getByText(/Retournée le/)).toBeTruthy();
     expect(screen.getByText(/Date à vérifier/)).toBeTruthy();
     cleanup();
     render(<JobCard {...props} job={{ ...job, status: "submitted" }} foremanNote={returned} />);

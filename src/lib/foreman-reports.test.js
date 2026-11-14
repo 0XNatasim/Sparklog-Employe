@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/supabaseClient", () => ({ supabase: {} }));
 
-import { MAX_AUDITED_NAME, MAX_REPORT, cleanReport, filterReports, foremanReportsCsv, isForemanOt, isNoteReturned, isNoteUnread, saveJobNote } from "./foreman-reports";
+import { MAX_REPORT, cleanReport, filterReports, foremanReportsCsv, isForemanOt, isNoteReturned, isNoteUnread, saveJobNote } from "./foreman-reports";
 
 describe("foreman reports", () => {
   it("recognises the CONTREMAÎTRE work order, whatever the case or spaces", () => {
@@ -14,25 +14,25 @@ describe("foreman reports", () => {
     expect(isForemanOt("123456")).toBe(false);
   });
 
-  it("accepts a text with an optional name and refuses an empty or too long one", () => {
-    expect(cleanReport({ auditedName: "  Paul   Roy ", body: " ok \r\n bien " })).toEqual({ auditedName: "Paul Roy", body: "ok \n bien" });
-    expect(cleanReport({ auditedName: "", body: "x" })).toEqual({ auditedName: null, body: "x" });
-    expect(cleanReport({ auditedName: "", body: "   " })).toBeNull();
-    expect(cleanReport({ auditedName: "", body: "x".repeat(MAX_REPORT + 1) })).toBeNull();
-    expect(cleanReport({ auditedName: "n".repeat(MAX_AUDITED_NAME + 1), body: "x" })).toBeNull();
+  it("accepts a text with an optional audited employee NUMBER and refuses an empty or too long text, or a name", () => {
+    expect(cleanReport({ auditedNumber: " 48 21 ", body: " ok \r\n bien " })).toEqual({ auditedNumber: 4821, body: "ok \n bien" });
+    expect(cleanReport({ auditedNumber: "", body: "x" })).toEqual({ auditedNumber: null, body: "x" });
+    expect(cleanReport({ auditedNumber: "", body: "   " })).toBeNull();
+    expect(cleanReport({ auditedNumber: "", body: "x".repeat(MAX_REPORT + 1) })).toBeNull();
+    for (const bad of ["Paul", "999", "1000000", "48.21", "4821a"]) expect(cleanReport({ auditedNumber: bad, body: "x" }), bad).toBeNull();
   });
 
   it("attaches a new note to its job, edits the existing one, and treats a repeated key as the same note", async () => {
-    const args = { userId: "u", jobId: "j1", submissionKey: "k", reportDate: "2026-11-10", auditedName: "", body: "texte" };
+    const args = { userId: "u", jobId: "j1", submissionKey: "k", reportDate: "2026-11-10", auditedNumber: "", body: "texte" };
     const insert = vi.fn().mockResolvedValue({ error: null });
     const noNote = { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }), insert };
     await saveJobNote({ from: () => noNote }, args);
-    expect(insert).toHaveBeenCalledWith({ user_id: "u", job_id: "j1", submission_key: "k", report_date: "2026-11-10", audited_name: null, body: "texte" });
+    expect(insert).toHaveBeenCalledWith({ user_id: "u", job_id: "j1", submission_key: "k", report_date: "2026-11-10", audited_employee_number: null, body: "texte" });
 
     const update = vi.fn(() => ({ eq: async () => ({ error: null }) }));
     const hasNote = { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: "r1" }, error: null }) }) }), update };
-    await saveJobNote({ from: () => hasNote }, { ...args, auditedName: "Paul", body: "corrigé" });
-    expect(update).toHaveBeenCalledWith({ audited_name: "Paul", body: "corrigé" });
+    await saveJobNote({ from: () => hasNote }, { ...args, auditedNumber: "4821", body: "corrigé" });
+    expect(update).toHaveBeenCalledWith({ audited_employee_number: 4821, body: "corrigé" });
 
     const dup = { ...noNote, insert: async () => ({ error: { code: "23505" } }) };
     await expect(saveJobNote({ from: () => dup }, args)).resolves.toBeUndefined();
@@ -45,19 +45,19 @@ describe("foreman reports", () => {
   it("exports the notes with the work sheet they follow, protected against spreadsheet formulas", () => {
     const labels = { columns: { date: "d", author: "a", ot: "o", workDate: "w", times: "t", status: "s", audited: "u", note: "n" }, status: { submitted: "soumis" } };
     const csv = foremanReportsCsv([
-      { created_at: "2026-11-10T20:00:00Z", author: "Éric", report_date: "2026-11-10", audited_name: "Paul", body: "=cmd\nligne 2", job: { ot: "CONTREMAÎTRE", job_date: "2026-11-10", depart: "06:30:00", fin: "15:00:00", status: "submitted" } },
-      { created_at: "2026-11-09T20:00:00Z", author: "Luc", report_date: "2026-11-09", audited_name: null, body: "x", job: null },
+      { created_at: "2026-11-10T20:00:00Z", author: "Éric", report_date: "2026-11-10", audited_employee_number: 4821, body: "=cmd\nligne 2", job: { ot: "CONTREMAÎTRE", job_date: "2026-11-10", depart: "06:30:00", fin: "15:00:00", status: "submitted" } },
+      { created_at: "2026-11-09T20:00:00Z", author: "Luc", report_date: "2026-11-09", audited_employee_number: null, body: "x", job: null },
     ], labels);
     const lines = csv.split("\r\n");
     expect(lines[0]).toBe("d;a;o;w;t;s;u;n");
-    expect(csv).toContain("2026-11-10;Éric;CONTREMAÎTRE;2026-11-10;06:30-15:00;soumis;Paul;\"'=cmd\nligne 2\"");
+    expect(csv).toContain("2026-11-10;Éric;CONTREMAÎTRE;2026-11-10;06:30-15:00;soumis;#4821;\"'=cmd\nligne 2\"");
     expect(lines.at(-1)).toBe("2026-11-09;Luc;;2026-11-09;;;;x");
   });
 
   it("searches author, audited person and text without caring for accents or case", () => {
     const list = [
-      { author: "Éric Tremblay", audited_name: "Paul", body: "Casque oublié" },
-      { author: "Luc", audited_name: null, body: "Rien à signaler" },
+      { author: "Éric Tremblay", audited_employee_number: 4821, body: "Casque oublié" },
+      { author: "Luc", audited_employee_number: null, body: "Rien à signaler" },
     ];
     expect(filterReports(list, "eric")).toHaveLength(1);
     expect(filterReports(list, "CASQUE")).toHaveLength(1);

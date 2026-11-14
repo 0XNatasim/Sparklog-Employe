@@ -9,7 +9,7 @@ vi.mock("@/supabaseClient", () => ({ supabase: {} }));
 const { default: ForemanNoteIcon } = await import("./ForemanNoteIcon");
 
 const fr = (key) => dictionaries.fr[key];
-const note = { audited_name: "Paul Roy", body: "Casque oublié", created_at: "2026-11-10T20:00:00Z" };
+const note = { audited_employee_number: 4821, body: "Casque oublié", created_at: "2026-11-10T20:00:00Z" };
 
 afterEach(cleanup);
 
@@ -29,7 +29,7 @@ describe("ForemanNoteIcon", () => {
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Casque oublié")).toBeTruthy();
-    expect(screen.getByText("Paul Roy")).toBeTruthy();
+    expect(screen.getByText("#4821")).toBeTruthy();
   });
 
   it("renders nothing without a note", () => {

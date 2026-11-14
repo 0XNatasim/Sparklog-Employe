@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.19.0
+# Sparklog-Employés (côté 1 : pointage) — V0.20.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.19.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.20.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -58,3 +58,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.18.0 :** `supabase/next/0013_manager_tools` : source de saisie (`job_entry_sources`, étoile « saisie manuelle »), compteurs `manager_job_counts`, `ot_reuse_for_jobs` (renvoie le numéro de l'autre employé), `evidence_download_alert`, diagnostic de lecture de photo (`file_read_errors` + `log_file_read_error`, sans navigateur ni appareil), feuille d'urgence (`delete_manager_entry`, `remind_manager_entry` par avis à l'employé), avec test SQL et 11 mutations vérifiées. « État du service » abandonné. App : `job-anomalies` lit `other_employee_number`, `file-read-report` n'envoie plus navigateur ni mode d'installation, le rappel de la feuille d'urgence n'envoie plus d'annonce. Écarts app ↔ schéma : 29 → 22.
 
 **V0.19.0 :** retrait du côté 1 de ce qui appartient au côté 2 : notes personnelles des gestionnaires (`NotesPanel`, `NoteThread`, `lib/notes`), taux et barèmes de paie (`lib/payroll-rates`), inscriptions et dates d'embauche (`lib/signups`), carte « État du service » (`InfraHealthCard`, fonction `infra_metrics`, route `advanced/health`). Le temps libre n'est plus lu (`src/lib/no-time-off.js` renvoie une liste vide aux calculs) ; plus de `start_date`, `apprentice_level` ni `departure_status` dans les lectures ; l'entrée Notes du menu n'a plus que l'onglet Contremaître. Écarts app ↔ schéma : 22 → 6.
+
+**V0.20.0 :** **0 écart entre l'application et le schéma neuf** (`scripts/check-app-against-schema.mjs`). Annonces : `announcement_recipients` / `announcements` lues par `src/lib/announcements.js` (les écrans gardent leur forme, une annonce retirée n'est jamais lue ; le bouton « Rappeler » de la boîte à faire, qui créait une annonce, est retiré : les annonces viennent du côté 2). Note du contremaître : l'employé audité est un **numéro** (`audited_employee_number`, 4 à 6 chiffres), plus de « retournée par … » ni de « saisie par … » nominatifs (`audit.management`). Nouvelle tâche CI `schema` (PostgreSQL 16 + contrôle des écarts, non encore vue tourner sur GitHub) ; `keep-warm.yml` (ping de l'ancienne base de Sparklog) supprimé.

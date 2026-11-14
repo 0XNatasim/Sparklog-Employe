@@ -89,7 +89,7 @@ export default function History() {
     const ids = jobs.filter((j) => isForemanOt(j.ot)).map((j) => j.id);
     if (!ids.length) return undefined;
     let alive = true;
-    supabase.from("foreman_reports").select("job_id, audited_name, body, created_at, returned_at, returned_by_name, return_reason").in("job_id", ids)
+    supabase.from("foreman_reports").select("job_id, audited_employee_number, body, created_at, returned_at, return_reason").in("job_id", ids)
       .then(({ data }) => { if (alive && data) setForemanNotes(new Map(data.map((row) => [row.job_id, row]))); })
       .catch(() => undefined);
     return () => { alive = false; };
@@ -334,7 +334,7 @@ export default function History() {
     const managerEntry = isPendingManagerEntry(job);
     const ok = await confirm(managerEntry
       ? t("history.confirm.managerEntry", {
-        name: job.manager_entry_by_name || t("audit.someone"),
+        name: t("audit.management"),
         date: dayjs(job.job_date).format("DD MMM YYYY"),
         ot: job.ot,
         from: fmtTimeHHmm(job.depart),
@@ -529,7 +529,7 @@ export default function History() {
                         </div>
                         {isPendingManagerEntry(j) && (
                           <div className="text-xs font-medium text-warning">
-                            {t("history.managerEntry.from", { name: j.manager_entry_by_name || t("audit.someone") })}
+                            {t("history.managerEntry.from", { name: t("audit.management") })}
                           </div>
                         )}
 

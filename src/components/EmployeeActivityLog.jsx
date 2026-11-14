@@ -74,7 +74,7 @@ export default function EmployeeActivityLog() {
   const fetchPage = useCallback(async (before, signal) => {
     let query = supabase
       .from("employee_activity_log")
-      .select("id, created_at, user_id, user_name, event, job_id, details")
+      .select("id, created_at, user_id, event, job_id, details")
       .gte("created_at", periodStart(period).toISOString())
       .order("created_at", { ascending: false })
       .limit(QUERY_BUDGETS.employeeActivityPage);
@@ -137,7 +137,7 @@ export default function EmployeeActivityLog() {
 
   const nameOf = useCallback((row) => {
     const e = employees.find((p) => p.id === row.user_id);
-    return employeeLabel(e) || row.user_name || t("audit.someone");
+    return employeeLabel(e) || t("audit.someone");
   }, [employees, t]);
 
   function describe(row) {

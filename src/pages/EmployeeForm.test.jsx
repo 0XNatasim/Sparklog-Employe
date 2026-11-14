@@ -246,7 +246,7 @@ describe("EmployeeForm — new entry", () => {
     fireEvent.click(screen.getByRole("button", { name: fr("foremanNotes.button") }));
     const attach = await screen.findByRole("button", { name: fr("foremanNotes.attach") });
     expect(attach.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText(fr("foremanNotes.audited")), { target: { value: "Paul Roy" } });
+    fireEvent.change(screen.getByLabelText(fr("foremanNotes.audited")), { target: { value: "4821" } });
     fireEvent.change(screen.getByLabelText(fr("foremanNotes.report")), { target: { value: "Casque oublié, rappel fait." } });
     fireEvent.click(attach);
     // Nothing is sent yet: the note waits for the work sheet.
@@ -260,7 +260,7 @@ describe("EmployeeForm — new entry", () => {
     // The note is sent with the job, linked to it.
     await waitFor(() => expect(state.fake.writes("foreman_reports")).toHaveLength(1));
     const note = state.fake.writes("foreman_reports")[0].payload;
-    expect(note).toMatchObject({ job_id: "job-new", audited_name: "Paul Roy", body: "Casque oublié, rappel fait." });
+    expect(note).toMatchObject({ job_id: "job-new", audited_employee_number: 4821, body: "Casque oublié, rappel fait." });
   });
 
   it("keeps Auto-fill for another employee, even on the CONTREMAÎTRE work order", async () => {

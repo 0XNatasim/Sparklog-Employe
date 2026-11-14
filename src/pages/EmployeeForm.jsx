@@ -174,7 +174,7 @@ export default function EmployeeForm() {
   // Foreman: paid 8 h per day worked; the Field Service capture is optional (proof, no manual-entry star).
   const [foremanEmployee, setForemanEmployee] = useState(false);
   const [showForemanNotes, setShowForemanNotes] = useState(false);
-  // The foreman's optional note on this work sheet (0136): { auditedName, body, saved }. Sent with the job when it is saved.
+  // The foreman's optional note on this work sheet (0136): { auditedNumber, body, saved }. Sent with the job when it is saved.
   const [foremanNote, setForemanNote] = useState(null);
   const foremanNoteKeyRef = useRef(null);
   // An existing job: its note, to edit it with the job.
@@ -267,7 +267,7 @@ export default function EmployeeForm() {
   async function applyEditLoad({ job: data, parkingReceipt, error }) {
     try {
       if (data) {
-        setManagerEntryBy(isPendingManagerEntry(data) ? (data.manager_entry_by_name || t("audit.someone")) : null);
+        setManagerEntryBy(isPendingManagerEntry(data) ? t("audit.management") : null);
         setJobDate(data.job_date || companyDate());
         setOt(data.ot || "");
         setDepart(fmtTimeHHmm(data.depart) || "");
@@ -658,7 +658,7 @@ export default function EmployeeForm() {
       if (foremanEmployee && foremanNote && !foremanNote.saved && isForemanOt(ot)) {
         try {
           if (!foremanNoteKeyRef.current) foremanNoteKeyRef.current = crypto.randomUUID();
-          await saveJobNote(supabase, { userId: user.id, jobId: savedJobId, submissionKey: foremanNoteKeyRef.current, reportDate: job_date, auditedName: foremanNote.auditedName, body: foremanNote.body });
+          await saveJobNote(supabase, { userId: user.id, jobId: savedJobId, submissionKey: foremanNoteKeyRef.current, reportDate: job_date, auditedNumber: foremanNote.auditedNumber, body: foremanNote.body });
           foremanNoteKeyRef.current = null;
           setForemanNote(editId ? { ...foremanNote, saved: true } : null);
         } catch {

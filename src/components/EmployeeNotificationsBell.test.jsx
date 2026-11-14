@@ -17,8 +17,8 @@ const { default: EmployeeNotificationsBell } = await import("./EmployeeNotificat
 const fr = (key) => dictionaries.fr[key];
 
 const MESSAGES = [
-  { broadcast_id: "b1", acknowledged_at: null, manager_broadcasts: { body: "Nouveau message", created_at: "2026-10-25T12:00:00Z", attachments: [] } },
-  { broadcast_id: "b2", acknowledged_at: "2026-10-20T12:00:00Z", manager_broadcasts: { body: "Ancien message", created_at: "2026-10-19T12:00:00Z", attachments: [] } },
+  { announcement_id: "b1", acknowledged_at: null, withdrawn_at: null, announcements: { body: "Nouveau message", created_at: "2026-10-25T12:00:00Z", attachments: [] } },
+  { announcement_id: "b2", acknowledged_at: "2026-10-20T12:00:00Z", withdrawn_at: null, announcements: { body: "Ancien message", created_at: "2026-10-19T12:00:00Z", attachments: [] } },
 ];
 
 function setup(role = "employee") {
@@ -27,13 +27,13 @@ function setup(role = "employee") {
   const rows = MESSAGES.map((m) => ({ ...m }));
   const broadcastRecipients = (call) => {
     if (call.op === "update") {
-      const id = call.filters.find(([, column]) => column === "broadcast_id")?.[2];
-      for (const row of rows) if (row.broadcast_id === id) Object.assign(row, call.payload);
+      const id = call.filters.find(([, column]) => column === "announcement_id")?.[2];
+      for (const row of rows) if (row.announcement_id === id) Object.assign(row, call.payload);
       return null;
     }
     return rows.map((row) => ({ ...row }));
   };
-  state.fake = createFakeSupabase({ tables: { broadcast_recipients: broadcastRecipients } });
+  state.fake = createFakeSupabase({ tables: { announcement_recipients: broadcastRecipients } });
   return render(<EmployeeNotificationsBell />);
 }
 
@@ -52,10 +52,10 @@ describe("EmployeeNotificationsBell", () => {
     openMenu(bell);
     fireEvent.click(await screen.findByText("Nouveau message"));
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    await waitFor(() => expect(state.fake.writes("broadcast_recipients")).toHaveLength(1));
-    const [write] = state.fake.writes("broadcast_recipients");
+    await waitFor(() => expect(state.fake.writes("announcement_recipients")).toHaveLength(1));
+    const [write] = state.fake.writes("announcement_recipients");
     expect(write.op).toBe("update");
-    expect(write.filters).toEqual([["eq", "broadcast_id", "b1"], ["eq", "employee_id", "emp"]]);
+    expect(write.filters).toEqual([["eq", "announcement_id", "b1"], ["eq", "employee_id", "emp"]]);
     await waitFor(() => expect(bell.textContent).not.toContain("1"));
   });
 
@@ -65,7 +65,7 @@ describe("EmployeeNotificationsBell", () => {
     openMenu(bell);
     fireEvent.click(await screen.findByText("Ancien message"));
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(state.fake.writes("broadcast_recipients")).toHaveLength(0);
+    expect(state.fake.writes("announcement_recipients")).toHaveLength(0);
   });
 
   it("is hidden for a manager account", () => {

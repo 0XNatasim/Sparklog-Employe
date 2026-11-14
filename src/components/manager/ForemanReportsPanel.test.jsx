@@ -13,7 +13,7 @@ vi.mock("@/supabaseClient", () => ({ get supabase() { return state.fake.client; 
 const { default: ForemanReportsPanel } = await import("./ForemanReportsPanel");
 
 const report = (extra = {}) => ({
-  id: "r1", user_id: "f1", job_id: "j1", report_date: "2026-11-10", audited_name: "Paul Roy", body: "Casque oublié", created_at: "2026-11-10T20:00:00Z",
+  id: "r1", user_id: "f1", job_id: "j1", report_date: "2026-11-10", audited_employee_number: 4821, body: "Casque oublié", created_at: "2026-11-10T20:00:00Z",
   job: { id: "j1", ot: "CONTREMAÎTRE", job_date: "2026-11-10", depart: "06:30:00", fin: "15:00:00", status: "submitted", updated_at: "2026-11-10T21:00:00Z" },
   ...extra,
 });
@@ -53,14 +53,14 @@ describe("ForemanReportsPanel", () => {
     expect(state.fake.rpcCalls("return_foreman_note_sheet")[0].args.p_reason).toBeNull();
   });
 
-  it("shows the other managers that a sheet was returned, by whom and why, until it is submitted again", async () => {
-    const returned = { returned_at: "2026-11-11T15:00:00Z", returned_by_name: "Marie", return_reason: "Date à vérifier" };
+  it("shows the other managers that a sheet was returned, and why, until it is submitted again", async () => {
+    const returned = { returned_at: "2026-11-11T15:00:00Z", return_reason: "Date à vérifier" };
     setup([report({ ...returned, job: { id: "j1", ot: "CONTREMAÎTRE", job_date: "2026-11-10", depart: "06:30:00", fin: "15:00:00", status: "updated" } })]);
-    expect(await screen.findByText(/Retournée par Marie/)).toBeTruthy();
+    expect(await screen.findByText(/Retournée le/)).toBeTruthy();
     expect(screen.getByText(/Date à vérifier/)).toBeTruthy();
     cleanup();
     setup([report({ ...returned })]);
-    expect(await screen.findByText(/Déjà retournée une fois, par Marie/)).toBeTruthy();
+    expect(await screen.findByText(/Déjà retournée une fois, le/)).toBeTruthy();
   });
 
   it("deletes the note alone, and offers no return for a sheet that is not submitted", async () => {

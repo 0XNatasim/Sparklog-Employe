@@ -74,7 +74,7 @@ export default function EmergencyTimesheet() {
   const loadEntries = useCallback(async () => {
     const { data, error: loadError } = await withTimeout(
       supabase.from("jobs")
-        .select("id, user_id, job_date, ot, depart, fin, status, locked, manager_entry_at, manager_entry_by_name, employee_confirmed_at, manager_entry_reminded_at")
+        .select("id, user_id, job_date, ot, depart, fin, status, locked, manager_entry_at, employee_confirmed_at, manager_entry_reminded_at")
         .not("manager_entry_at", "is", null)
         .order("manager_entry_at", { ascending: false })
         .limit(QUERY_BUDGETS.emergencyEntries),
@@ -398,7 +398,7 @@ export default function EmergencyTimesheet() {
                       <div className="font-medium">{nameById.get(entry.user_id) || "—"} · {entry.job_date}</div>
                       <div className="text-xs text-muted-foreground">
                         OT {entry.ot} · {hhmm(entry.depart)}–{hhmm(entry.fin)}
-                        {entry.manager_entry_by_name ? ` · ${entry.manager_entry_by_name}` : ""}
+                        
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
