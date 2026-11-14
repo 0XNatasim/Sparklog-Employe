@@ -32,8 +32,8 @@ describe("Profile (côté 1)", () => {
     setup({ viewing: false });
     expect(screen.getByText(fr("login.number"))).toBeTruthy();
     expect(screen.getByText("4821")).toBeTruthy();
-    expect(screen.queryByText(fr("auth.fullName"))).toBeNull();
-    expect(screen.queryByText(fr("auth.email"))).toBeNull();
+    expect(screen.queryByText(/nom complet|full name/i)).toBeNull();
+    expect(screen.queryByText(/courriel|e-?mail/i)).toBeNull();
     expect(screen.getByText("push-toggle")).toBeTruthy();
   });
 

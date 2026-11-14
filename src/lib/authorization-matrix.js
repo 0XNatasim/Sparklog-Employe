@@ -2,8 +2,6 @@ import {
   GRANTABLE_ADMIN_SECTIONS,
   canAccessSection,
   hasManagementAccess,
-  isNonCcqRole,
-  isPrivileged,
 } from "./roles";
 import { MANAGER_NAV_ITEMS, canOpenNavItem, visibleTabs } from "./manager-nav";
 import { requiresMfa } from "./mfa";
@@ -52,10 +50,8 @@ export function authorizationFor({ role, adminSections = [], paused = false }) {
     canLogOwnTime: knownRole && !paused,
     canManageAny: Object.values(sections).some(Boolean),
     managementSections: Object.freeze(sections),
-    canAccessSensitiveNas: knownRole && isPrivileged(role),
     // Password + authenticator code (0103): the database grants manager-level access only then.
     mustUseTwoFactor: knownRole && requiresMfa(role),
-    includedInCcqPayroll: knownRole && !isNonCcqRole(role),
   });
 }
 

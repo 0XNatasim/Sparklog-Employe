@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.22.0
+# Sparklog-Employés (côté 1 : pointage) — V0.23.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.22.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.23.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -64,3 +64,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.21.0 :** aperçu de test du côté 1 : `docs/mode-emploi-apercu.md` (12 étapes : projet Supabase de test, schéma, réglages d'authentification, fonctions Edge, propriétaire de test, page sur Canner, activation d'un employé de test), `docs/apercu/schema-apercu.sql` (les 14 migrations assemblées par `scripts/build-preview-sql.sh` ; `src/lib/preview-sql.test.js` échoue si le fichier n'est plus à jour), `docs/apercu/1-proprietaire.sql` et `2-client-api.sql`. `PREVIEW_SQL=… scripts/test-next-schema.sh` applique le fichier d'un seul coup et essaie les deux petits scripts (essai local seulement, pas sur Supabase).
 
 **V0.22.0 :** nettoyage des fonctions Edge. `send_push` réécrite (`handler.js` testé par `src/lib/send-push.test.js`) : appelée par le **côté 2** avec sa clé d'échange (`skc_…`, comme `pointage_api`), `{ announcement_id, reread? }`, destinataires lus dans `announcement_recipients` (annonce non retirée ; `reread` = seulement ceux qui n'ont pas accusé réception), **texte toujours générique** (« Nouveau message » / « Message modifié »), jamais le contenu ni un nom, 429 / 401 / 503 sans texte technique ; le navigateur n'appelle plus `send_push` (`notifyBroadcastPush` et `pushOutcome` retirés). Migration `0014_orphan_cleanup` : `find_orphaned_evidence_objects` (photos téléversées sans ligne ; stationnement : photos supplémentaires incluses ; grâce minimale d'une heure ; clé de service seulement) pour `cleanup_overtime_evidence`, qui n'accepte plus que la clé de service (plus de `verify_cron_secret` ni de pg_cron / Vault : l'ordonnanceur du serveur l'appelle). `delete_inventory_screenshots` journalise par numéros. `classify_week` supprimée (elle lisait des colonnes de paie absentes du côté 1). Le contrôle app ↔ schéma lit maintenant aussi `supabase/functions/` : 0 écart.
+
+**V0.23.0 :** nettoyage des textes et des droits. `src/lib/i18n.js` passe de 5 250 à 2 202 lignes : **1 524 clés inutilisées** retirées en français et en anglais (`scripts/unused-i18n-keys.mjs` les liste, `scripts/prune-i18n.mjs` les retire ; tient compte des clés construites comme `status.${x}` et du suffixe `.plain`). Nouveau test `src/lib/i18n-keys.test.js` : les deux langues ont les mêmes clés et toute clé citée dans le code existe. Matrice d'autorisation : plus de `canAccessSensitiveNas` ni `includedInCcqPayroll` (pas de NAS ni de paie CCQ au côté 1) ; retrait des tests qui lisaient les anciennes migrations du coffre NAS et de la paie.
