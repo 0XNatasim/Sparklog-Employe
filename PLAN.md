@@ -377,10 +377,10 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 | `payroll_period_ledger`, `payroll_ytd`, `employer_contributions`, `roe_history` | idem | Cumuls : vérifier par totaux |
 | `payroll_rates`, `statutory_rate_sets`, `ccq_rate_snapshots`, `travel_pay_rules`, `conges_indemnity_rate`, `payroll_employer_settings` | idem | Étape 6.5 |
 | `employee_forms`, `employee_form_access`, `profile_references`, cartes CCQ (bucket) | idem | Décision D7 sur la carte CCQ et la date de naissance |
-| `employee_time_off` | idem | À confirmer : sert-il au pointage ou à la gestion ? |
+| `employee_time_off` | idem | **Décidé : gestion** (2026-11-14) |
 | `messages`, `message_recipients`, `manager_broadcasts`, `broadcast_recipients`, `broadcast_revisions` | idem | Annonces (courriels) |
 | `accident_log`, `accident_files` (bucket) | idem | Noms, CNESST |
-| `employee_groups`, `employee_group_members` | **À trancher** | Servent à l'inventaire (côté 1) **et** aux noms |
+| `employee_groups`, `employee_group_members` | **Reste au côté 1, par numéro** (décidé 2026-11-14) | Le côté 2 les gère par une action de l'API et s'en sert pour cibler les annonces |
 
 **Tâches précises :**
 - [ ] **7.1** Gel de lecture de 2 h (nuit) ; instantané du côté 1 (sauvegarde nommée).
@@ -474,7 +474,7 @@ Livrable : tests de rejeu (un code ne marche qu'une fois), d'expiration, de bloc
 
 **10.3 Journaux.** `audit_log`, `employee_activity_log`, `manager_notifications` : réécrire acteur et cible **par numéro** (migration de données + triggers modifiés) ; les nouveaux triggers n'écrivent plus de nom.
 
-**10.4 Textes nominatifs.** `foreman_reports.audited_name` → numéro de l'employé audité (liste déroulante de numéros) ; `manager_notes` : message de mise en garde, filtre côté 2 pour les nouvelles notes.
+**10.4 Textes nominatifs.** `foreman_reports.audited_name` → numéro de l'employé audité (liste déroulante de numéros) ; `manager_notes` : **déplacées au côté 2** (décidé 2026-11-14), plus de filtre de noms côté 1.
 
 **10.5 Écrans du côté 1.** `ManagerDashboard`, `TodoInbox`, `WeekSnapshot`, `JobCard`, `History` en mode gestionnaire : affichent « Employé 1042 ». **Les écrans de gestion du côté 1 sont retirés** quand leur équivalent est dans le côté 2 (étape 13) ; d'ici là ils affichent des numéros.
   Employés : leur propre nom n'est plus affiché ; l'écran affiche leur numéro.
@@ -605,7 +605,7 @@ Livrable : tests de rejeu (un code ne marche qu'une fois), d'expiration, de bloc
 - Les **noms exacts des colonnes** du contrat (étape 3.3) : à confirmer contre la base.
 - La **région canadienne** disponible chez l'hébergeur et la possibilité de **migrer `auth.users` avec les condensats** (étape 11.3).
 - La façon de déplacer les **secrets du coffre** (NAS) entre projets (étape 7.3).
-- Le sort des **groupes / entrepôts** (étape 7, tableau) et du **temps libre** (`employee_time_off`).
+- (Tranché le 2026-11-14 : temps libre et notes de gestionnaires → côté 2 ; groupes / entrepôts → côté 1, par numéro, gérés par l'API.)
 - Ce que l'**hébergeur garde dans ses propres journaux** (IP, appareils, durée) et ce qu'on peut en réduire (3.6).
 - L'état du **support des passkeys** chez l'hébergeur (jugé expérimental dans une source externe, non vérifié ici).
 - Si la **convention** accepte le numéro d'employé tel quel comme identifiant (hypothèse de ce plan) ou exige une couche d'identifiant technique de plus : question 2 de l'étape 0.1.

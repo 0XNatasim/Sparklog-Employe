@@ -13,7 +13,8 @@ $PSQL <<'SQL'
 create role anon nologin; create role authenticated nologin; create role service_role nologin;
 create schema auth; create schema extensions;
 create table auth.users (id uuid primary key, email text);
-create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt() ->> 'sub', '')::uuid $$;
 grant usage on schema public, auth, extensions to anon, authenticated, service_role;
 SQL
 for f in "$ROOT"/supabase/next/[0-9]*.sql; do echo "-- $(basename "$f")"; $PSQL -f "$f"; done
