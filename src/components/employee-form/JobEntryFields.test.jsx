@@ -41,11 +41,11 @@ describe("JobEntryFields pre-made OT", () => {
   });
 
   it("marks the label when the OT typed is one of them, and none for a real number", async () => {
-    setup({ ot: "ok karine", tables: { preset_work_orders: [{ label: "OK KARINE" }] } });
+    setup({ ot: "ok technicien", tables: { preset_work_orders: [{ label: "OK TECHNICIEN" }] } });
     fireEvent.click(arrow());
     await waitFor(() => expect(screen.getByRole("option").getAttribute("aria-selected")).toBe("true"));
     cleanup();
-    setup({ ot: "190403", tables: { preset_work_orders: [{ label: "OK KARINE" }] } });
+    setup({ ot: "190403", tables: { preset_work_orders: [{ label: "OK TECHNICIEN" }] } });
     fireEvent.click(arrow());
     await waitFor(() => expect(screen.getByRole("option").getAttribute("aria-selected")).toBe("false"));
   });

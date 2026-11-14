@@ -24,7 +24,7 @@ describe("cleanPresetLabel", () => {
 
 describe("matchPreset", () => {
   it("finds the label an OT text stands for, ignoring case and spaces", () => {
-    expect(matchPreset("ok karine", DEFAULT_PRESET_LABELS)).toBe("OK KARINE");
+    expect(matchPreset("ok technicien", DEFAULT_PRESET_LABELS)).toBe("OK TECHNICIEN");
     expect(matchPreset("  Pause  sécurité ", DEFAULT_PRESET_LABELS)).toBe("PAUSE SÉCURITÉ");
     expect(matchPreset("190403", DEFAULT_PRESET_LABELS)).toBeNull();
     expect(matchPreset("", DEFAULT_PRESET_LABELS)).toBeNull();
@@ -32,10 +32,10 @@ describe("matchPreset", () => {
 });
 
 describe("presetTaken", () => {
-  const rows = [{ id: "a", label: "OK KARINE" }, { id: "b", label: "FORMATION HQ" }];
+  const rows = [{ id: "a", label: "OK TECHNICIEN" }, { id: "b", label: "FORMATION HQ" }];
   it("sees a name already used, but not the row itself", () => {
     expect(presetTaken(rows, "ok  karine")).toBe(true);
-    expect(presetTaken(rows, "OK KARINE", "a")).toBe(false);
+    expect(presetTaken(rows, "OK TECHNICIEN", "a")).toBe(false);
     expect(presetTaken(rows, "NOUVEAU")).toBe(false);
   });
 });

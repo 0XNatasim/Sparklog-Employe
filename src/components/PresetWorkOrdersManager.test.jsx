@@ -15,7 +15,7 @@ const { default: PresetWorkOrdersManager } = await import("./PresetWorkOrdersMan
 const fr = (key, vars = {}) => Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, v), dictionaries.fr[key]);
 const rows = [
   { id: "a", label: "PAUSE SÉCURITÉ", sort_order: 10, active: true },
-  { id: "b", label: "OK KARINE", sort_order: 20, active: true },
+  { id: "b", label: "OK TECHNICIEN", sort_order: 20, active: true },
 ];
 const calls = (op) => state.fake.calls.filter((call) => call.table === "preset_work_orders" && call.op === op);
 
@@ -29,7 +29,7 @@ afterEach(cleanup);
 describe("PresetWorkOrdersManager", () => {
   it("lists the labels and adds a new one in capitals, after the last", async () => {
     setup();
-    await screen.findByText("OK KARINE");
+    await screen.findByText("OK TECHNICIEN");
     fireEvent.change(screen.getByLabelText(fr("presetOt.newLabel")), { target: { value: "formation hq" } });
     fireEvent.click(screen.getByRole("button", { name: fr("presetOt.add") }));
     await waitFor(() => expect(calls("insert")).toHaveLength(1));
@@ -38,9 +38,9 @@ describe("PresetWorkOrdersManager", () => {
 
   it("refuses a label already in the list and a real OT number, without writing", async () => {
     setup();
-    await screen.findByText("OK KARINE");
+    await screen.findByText("OK TECHNICIEN");
     const input = screen.getByLabelText(fr("presetOt.newLabel"));
-    fireEvent.change(input, { target: { value: "ok karine" } });
+    fireEvent.change(input, { target: { value: "ok technicien" } });
     fireEvent.click(screen.getByRole("button", { name: fr("presetOt.add") }));
     expect(await screen.findByText(fr("presetOt.errors.taken"))).toBeTruthy();
     fireEvent.change(input, { target: { value: "190403" } });
@@ -51,7 +51,7 @@ describe("PresetWorkOrdersManager", () => {
 
   it("hides a label from the drop-down without deleting it", async () => {
     setup();
-    await screen.findByText("OK KARINE");
+    await screen.findByText("OK TECHNICIEN");
     fireEvent.click(screen.getAllByRole("button", { name: fr("presetOt.hide") })[1]);
     await waitFor(() => expect(calls("update")).toHaveLength(1));
     expect(calls("update")[0].payload).toEqual({ active: false });
@@ -60,7 +60,7 @@ describe("PresetWorkOrdersManager", () => {
 
   it("moves a label up by renumbering", async () => {
     setup();
-    await screen.findByText("OK KARINE");
+    await screen.findByText("OK TECHNICIEN");
     fireEvent.click(screen.getAllByRole("button", { name: fr("presetOt.up") })[1]);
     await waitFor(() => expect(calls("update")).toHaveLength(2));
     expect(calls("update").map((call) => call.payload)).toEqual([{ sort_order: 10 }, { sort_order: 20 }]);
