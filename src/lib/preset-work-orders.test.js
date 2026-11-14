@@ -24,7 +24,7 @@ describe("cleanPresetLabel", () => {
 
 describe("matchPreset", () => {
   it("finds the label an OT text stands for, ignoring case and spaces", () => {
-    expect(matchPreset("ok technicien", DEFAULT_PRESET_LABELS)).toBe("OK TECHNICIEN");
+    expect(matchPreset("formation  hq", DEFAULT_PRESET_LABELS)).toBe("FORMATION HQ");
     expect(matchPreset("  Pause  sécurité ", DEFAULT_PRESET_LABELS)).toBe("PAUSE SÉCURITÉ");
     expect(matchPreset("190403", DEFAULT_PRESET_LABELS)).toBeNull();
     expect(matchPreset("", DEFAULT_PRESET_LABELS)).toBeNull();
@@ -34,7 +34,7 @@ describe("matchPreset", () => {
 describe("presetTaken", () => {
   const rows = [{ id: "a", label: "OK TECHNICIEN" }, { id: "b", label: "FORMATION HQ" }];
   it("sees a name already used, but not the row itself", () => {
-    expect(presetTaken(rows, "ok  karine")).toBe(true);
+    expect(presetTaken(rows, "ok  technicien")).toBe(true);
     expect(presetTaken(rows, "OK TECHNICIEN", "a")).toBe(false);
     expect(presetTaken(rows, "NOUVEAU")).toBe(false);
   });
@@ -53,18 +53,17 @@ describe("order", () => {
   });
 });
 
-describe("migration 0124", () => {
-  const sql = readFileSync(new URL("../../supabase/migrations/20261030120000_0124_preset_work_orders.sql", import.meta.url), "utf8");
+describe("preset work orders in the new schema (0003)", () => {
+  const sql = readFileSync(new URL("../../supabase/next/0003_company_settings.sql", import.meta.url), "utf8");
   it("lets everybody signed in read the list but only managers change it", () => {
     expect(sql).toContain("enable row level security");
-    expect(sql).toContain("for select to authenticated using (true)");
-    expect(sql.match(/public\.get_my_role\(\) = 'manager'/g).length).toBeGreaterThanOrEqual(4);
-    expect(sql).toContain("grant select on public.preset_work_orders to authenticated");
+    expect(sql).toContain("create policy preset_work_orders_read on public.preset_work_orders for select to authenticated using (true)");
+    for (const op of ["insert", "update", "delete"]) expect(sql).toMatch(new RegExp(`create policy preset_work_orders_manager_${op} on public\\.preset_work_orders`));
+    expect(sql).toContain("public.company_holidays, public.preset_work_orders to authenticated");
   });
-  it("refuses a label that looks like a real OT number, and seeds the five of the owner", () => {
+  it("refuses a label that looks like a real OT number, and seeds the default labels (no first name)", () => {
     expect(sql).toContain("!~ '^[0-9]{4,}$'");
-    // CONTREMAÎTRE is seeded later, by migration 0133 (foreman role).
-    const foreman = readFileSync(new URL("../../supabase/migrations/20261110120000_0133_foreman_role.sql", import.meta.url), "utf8");
-    for (const label of DEFAULT_PRESET_LABELS) expect(sql + foreman).toContain(`'${label}'`);
+    for (const label of DEFAULT_PRESET_LABELS) expect(sql).toContain(`'${label}'`);
+    expect(sql).not.toMatch(/karine|technicien/i);
   });
 });
