@@ -24,7 +24,7 @@ Ce n'est **pas un avis juridique** ; les critères marqués **[À VALIDER]** dé
 |---|---------|-----------------|
 | G1 | **Centre de données au Québec**, adresse précise ; sauvegardes et reprise après sinistre aussi **au Québec** | Courriel signé du fournisseur ou annexe du contrat |
 | G2 | **Propriété et contrôle canadiens** : pas de société mère étrangère, ni de filiale soumise à une loi étrangère d'accès aux données (CLOUD Act pour les États-Unis) | Registre des entreprises (Québec ou fédéral), structure de propriété écrite par le fournisseur |
-| G3 | **ISO 27001 et/ou SOC 2 Type 2** pour **le site et le service loués** (portée écrite), certificat ou rapport **en cours de validité** **[À VALIDER : certificat du fournisseur seulement, ou aussi de l'exploitant — question 7]** | Certificat daté, organisme émetteur, portée |
+| G3 | **ISO 27001 et/ou SOC 2 Type 2** pour **le site et le service loués** (portée écrite), certificat ou rapport **en cours de validité** **Question 7 : réponse verbale reçue le 2026-11-14 — le certificat du fournisseur suffit, l'exploitant n'a pas à être certifié ; à confirmer par écrit** | Certificat daté, organisme émetteur, portée |
 | G4 | **Entente écrite de traitement** (art. 18.3 de la Loi 25) acceptant : pas de transfert hors Québec, notification d'incident dans un délai précis, destruction des données à la fin du contrat avec attestation | Contrat ou addenda signé |
 | G5 | **Machine virtuelle ou dédiée avec accès root et Docker** (pas seulement de l'hébergement d'applications) | Fiche de l'offre |
 | G6 | **Support, journaux et personnel d'administration** dans un pays acceptable (au minimum au Canada, de préférence au Québec) ; aucune ouverture de la machine par le fournisseur sans trace | Réponse écrite |
@@ -105,7 +105,7 @@ Total d'un fournisseur : somme des (note × poids) ; dans Google Sheets : `=SOMM
 1. **Présélectionner 3 à 4 fournisseurs** parmi la section 4 (et les recommandations de votre entourage).
 2. **Envoyer le courriel de la section 6** ; ranger **chaque réponse** (courriel complet, certificats, contrats) dans le dossier « Preuves ».
 3. **Remplir la grille** ; passer d'abord les éliminatoires, noter ensuite.
-4. **Faire valider** par l'avocat ou l'AECQ ce qui dépend d'eux (G3, G6, et la question 7 de l'étape 0.1).
+4. **Faire valider** par l'avocat ou l'AECQ ce qui dépend d'eux (G3, G6) et **obtenir par écrit** la réponse à la question 7 (reçue verbalement le 2026-11-14).
 5. **Décider** et inscrire dans `OFFICIEL.md` (section 11, D4) : fournisseur retenu, date, points faibles connus, preuves rangées, plan B.
 6. **Ensuite seulement** commander le serveur d'essai (2bis.3) ; le serveur de production quand 2bis est complet.
 
