@@ -1,10 +1,10 @@
-# NOOB — Sparklog-Employés (V0.23.0)
+# NOOB — Sparklog-Employés (V0.24.0)
 
 **Ce que c'est :** la moitié « pointage » de Sparklog, en train d'être construite dans un nouveau dépôt. L'autre moitié (noms, paie) est dans `Sparklog-Gestion`.
 
 **Ce que vous voyez maintenant :** rien de nouveau pour les employés. Ce dépôt n'est **pas** utilisé en production : Sparklog (l'ancien dépôt) tourne toujours.
 
-**Ce qui a été fait (V0.23.0) :** le code du pointage a été copié de Sparklog, et les écrans de gestion et de paie ont été retirés (ils sont dans Sparklog-Gestion).
+**Ce qui a été fait (V0.24.0) :** le code du pointage a été copié de Sparklog, et les écrans de gestion et de paie ont été retirés (ils sont dans Sparklog-Gestion).
 
 **V0.11.0 :** documentation seulement — `PLAN.md` complété (codes d'activation, journaux minimaux, CSV d'abord, couche d'authentification séparée, corrections sans écrasement). Aucun code changé.
 
@@ -67,3 +67,5 @@
 **V0.22.0 :** **nettoyage des fonctions de service.** (1) **Notifications téléphone** : refaites pour que ce soit le **côté 2** qui les déclenche, avec sa clé. Le texte est **toujours le même** (« Nouveau message ») : jamais le contenu d'une annonce, un nom, une heure ni un montant, parce que l'adresse d'un téléphone appartient à Google, Apple ou Mozilla. (2) **Destruction automatique des photos** (preuves de temps supp., stationnement, inventaire) : la fonction qui supprime les photos échues et les photos « orphelines » (téléversées mais jamais enregistrées) est **réparée** pour la nouvelle base, avec un test qui vérifie qu'elle **ne supprime jamais** une photo encore utilisée (y compris les photos supplémentaires d'un reçu de stationnement) ni une photo téléversée depuis moins d'une heure. **À prévoir au moment du serveur :** une **tâche planifiée** (cron du serveur) qui appelle cette fonction chaque jour ; sans elle, rien n'est supprimé. (3) Le journal de la suppression d'un inventaire écrit des **numéros**, plus de noms. (4) Une fonction de paie (`classify_week`) est **supprimée** du côté 1. **Rien ne change pour les employés.**
 
 **V0.23.0 :** **ménage des textes et des droits.** J'ai retiré **1 524 textes** de l'application qui ne servaient plus à rien (écrans de paie, de taux, de notes, d'inscriptions… partis chez la gestion) : le fichier des textes passe de 5 250 à 2 202 lignes, ce qui allège aussi l'application. Un **test automatique** vérifie maintenant que chaque texte affiché existe en français **et** en anglais, pour éviter qu'un texte brut du genre « form.save » apparaisse à l'écran. J'ai aussi retiré du tableau des droits les notions de **NAS** et de **paie CCQ**, qui n'existent plus dans cette application. **Reste :** remplacer la lecture automatique des captures (OCR.space est hors Québec) : Tesseract est la piste, à **mesurer sur 20 à 30 vraies captures masquées** avant de décider. **Rien ne change pour les employés.**
+
+**V0.24.0 :** j'ai fait un **outil d'essai de Tesseract** sur vos captures (il tourne ici, vos images ne sont pas dans le dépôt). Premiers résultats sur vos 14 captures Field Service : l'OT, la date, le départ, l'arrivée, la fin et les km sont lus correctement presque à tout coup ; le détail complet suit. **Rien ne change pour les employés.**
