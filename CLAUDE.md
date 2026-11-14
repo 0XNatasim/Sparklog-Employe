@@ -12,16 +12,16 @@ Jamais de valeur personnelle (nom, NAS, salaire, montant de paie) dans le dépô
 
 **Règle de sécurité des tables :** pour toute nouvelle table, `revoke all … from anon, public, authenticated` **avant** les `grant` voulus (Supabase donne des droits par défaut).
 
-## État (V0.2.1)
+## État (V0.3.0)
 
 Squelette copié de Sparklog V2.4.258 (étape 1bis de `PLAN.md`) : voir `COPIE-DEPUIS-SPARKLOG.md`. Écrans de gestion et de paie retirés ; `App.jsx`, `ManagerPages.jsx` et
 `manager-nav.js` réduits au temps (Aujourd'hui, En direct, Notes, Feuilles de temps, Inventaire, Journal, État du service, Feuille d'urgence).
 Les migrations de Sparklog (`supabase/migrations/`) sont encore **toutes** là (les tests de contrat les lisent) ; elles seront remplacées par des migrations neuves à l'étape 10.
 
-## Schéma neuf (V0.2.1)
+## Schéma neuf (V0.3.0)
 
 `supabase/next/` contient le schéma neuf (migrations `NNNN_*.sql` + `test-NNNN.sql`), **séparé** de `supabase/migrations/` (copie de Sparklog, encore lue par des tests). `scripts/test-next-schema.sh` (en root, PostgreSQL 16 local)
-applique `next/` sur une base jetable avec de faux schémas Supabase puis lance les tests SQL ; à lancer avant chaque PR qui touche `next/`. Décisions table par table et ordre des migrations : `docs/schema-cote1.md`. Fait : `0001_identity`, `0002_roles`. Décisions du 2026-11-14 : `employee_time_off` et notes de gestionnaires → côté 2 ; groupes d'employés → côté 1 (par numéro).
+applique `next/` sur une base jetable avec de faux schémas Supabase puis lance les tests SQL ; à lancer avant chaque PR qui touche `next/`. Décisions table par table et ordre des migrations : `docs/schema-cote1.md`. Fait : `0001_identity`, `0002_roles`, `0003_company_settings`, `0004_jobs` (fiche de base ; `validate_job_submission_contract` sera remplacée par 0005 puis 0007). Pour relever la structure d'une table de Sparklog : `scripts/rebuild-legacy-db.sh` puis `pg_dump -s -t …` sur `/tmp/legacydb` (port 54330). Chaque migration neuve a son `test-NNNN.sql` ; vérifier au moins une mutation (casser une règle, constater l'échec, rétablir). Décisions du 2026-11-14 : `employee_time_off` et notes de gestionnaires → côté 2 ; groupes d'employés → côté 1 (par numéro).
 
 ## Ouvert (voir `PLAN.md`)
 

@@ -56,10 +56,18 @@ Légende : **Garder** = reste au côté 1 ; **Gestion** = va au côté 2 (`Spark
 
 1. `0001_identity` — profil minimal, codes d'activation. **Fait et testé** (`scripts/test-next-schema.sh`).
 2. `0002_roles` — `get_my_role()`, `is_privileged()` (aal2), `is_active_employee()`, lecture des profils. **Fait et testé.**
-3. `0003_company_settings` — réglages et jours fériés.
-4. `0004_jobs` — fiches, validation de soumission, chevauchement, fuseau (reprendre 0062 à 0064, 0116, 0135 en une version consolidée, **un test par règle déjà verrouillée dans Sparklog**).
-5. `0005_evidence_meals_parking` — preuves, repas, stationnement, tampons de nettoyage.
+3. `0003_company_settings` — réglages du temps, conservation des preuves, 32 jours fériés (2026-2028, jours de la convention), OT prédéfinis. **Fait et testé.** Pas de `company_capture_settings` (le côté 1 ne lit ni carte CCQ, ni date de naissance, ni syndicat).
+4. `0004_jobs` — fiche de temps, instants de Montréal (heure d'hiver / d'été, nuit, heure inexistante au printemps, heure répétée à l'automne avec choix 1 ou 2 réservé aux gestionnaires), déverrouillage de journée, fenêtre de saisie (férié, échéance), contrat de soumission de base (intervalle de 0 à 16 h exclu / inclus, chevauchement des fiches soumises, retour, kilomètres), options du profil qui changent le temps, droits et RLS. **Fait et testé** (quatre mutations vérifiées). Écarts voulus : pas de taux ni de montant sur la fiche, pas de `manager_entry_by_name`.
+4b. **À faire pour compléter les fiches :** fonctions serveur d'écriture (`save_own_job` avec clé d'idempotence et verrou par employé, `create_job_for_employee`, `submit_manager_entry_for_employee`, `return_job_for_correction`, `return_foreman_note_sheet`, approbation) — un employé ne peut pas soumettre par mise à jour directe, comme dans Sparklog.
+5. `0005_evidence_meals_parking` — preuves, repas, stationnement, tampons de nettoyage ; **remplace** `validate_job_submission_contract` pour y ajouter la preuve de temps supplémentaire (seuil 480 / 600 min, premier trajet non payé, déplacement ≥ 65 km, drapeau `sparklog.owner_submit`).
 6. `0006_notes_review_audit` — notes, notifications, audit sans donnée nominative, historique des corrections.
-7. `0007_inventory` (avec `employee_groups`), `0008_push`, `0009_announcements`, `0010_sync_api` (clients, actions, `action_key` unique, `expected_version`).
+7. `0007_inventory` (avec `employee_groups` ; **remplace** à nouveau `validate_job_submission_contract` pour l'inventaire de fin de quart), `0008_push`, `0009_announcements`, `0010_sync_api` (clients, actions, `action_key` unique, `expected_version`).
 
 Chaque migration : fichier SQL + test SQL (`next/test-NNNN.sql`) exécuté par `scripts/test-next-schema.sh` sur un PostgreSQL jetable, avec ses fausses fonctions Supabase (`auth.uid()`, rôles). Ce banc d'essai ne remplace pas un essai sur une vraie base Supabase.
+
+## Notes de relevé (V0.3.0)
+
+- **Banc de référence :** `scripts/rebuild-legacy-db.sh` reconstruit les 150 migrations de Sparklog sur un PostgreSQL local (avec `check_function_bodies = off`, comme Supabase) : `ok=150 bad=0`. On y relève la structure exacte (`pg_dump -s -t …`, `pg_get_functiondef`) avant d'écrire une migration neuve.
+- **Donnée nominative trouvée dans une liste de départ :** l'ancienne liste d'OT prédéfinis contient un libellé avec un prénom. Il n'est **pas** repris dans `next/0003`. Il reste dans les migrations copiées de Sparklog (`supabase/migrations/`, dépôt public), qui seront retirées quand `next/` les remplace.
+- **Montants sur la fiche :** `jobs` portait trois « instantanés » de taux (`hourly_rate_snapshot`, `team_leader_premium_snapshot`, `km_rate_snapshot`). Le côté 2 les calcule : ils ne sont pas repris.
+- **Jours fériés :** les dates sont celles de la convention (par exemple la Fête du Canada 2027 est le 2027-07-02, pas le 07-01).
