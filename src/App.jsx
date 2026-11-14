@@ -15,7 +15,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 const History = lazy(() => import("./pages/History"));
 const Week = lazy(() => import("./pages/Week"));
 const Profile = lazy(() => import("./pages/Profile"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ManagerLayout = lazy(() => import("./components/manager/ManagerLayout"));
 const managerPage = (name) => lazy(() => import("./pages/manager/ManagerPages").then((m) => ({ default: m[name] })));
 const AuditPage = managerPage("AuditPage");
@@ -51,20 +50,14 @@ function RouteErrorBoundary({ children }) {
 }
 
 export default function App() {
-  const isPasswordRecovery = window.location.pathname === "/reset-password";
-
   React.useEffect(() => {
     // If the user landed on a non-root path (e.g. /form from a stale bookmark),
     // collapse it to "/" so HashRouter takes over cleanly.
     const { pathname, hash, search } = window.location;
-    if (pathname !== "/" && pathname !== "/reset-password" && !hash) {
+    if (pathname !== "/" && !hash) {
       window.history.replaceState(null, "", `/${search}${hash}`);
     }
   }, []);
-
-  // Supabase appends its recovery credentials to the URL hash. Keep this
-  // pathname outside HashRouter so the credentials are not mistaken for a route.
-  if (isPasswordRecovery) return <Suspense fallback={<PageLoading />}><ResetPassword /></Suspense>;
 
   return (
     <HashRouter>

@@ -39,3 +39,5 @@ Corps `{ ok: false, error: "<code court>" }`, jamais de texte SQL. 400 `invalid_
 
 ## Activation par l'employé (`activate_account`, V0.14.0)
 Fonction séparée, appelée par le navigateur de l'employé (pas par le côté 2) : `POST { employee_number, code, password }`. Le code (10 caractères, espaces et tirets tolérés) est vérifié et consommé par `consume_activation_code`, puis le mot de passe (12 à 72 caractères, sans le numéro ni le code) est posé sur le compte `<numéro>@pointage.invalid`. Réponses : 200 ; 422 (format, avant la base : ne compte pas comme un essai) ; 401 `invalid_code` (faux, inconnu, utilisé ou révoqué) ; 410 `code_expired` ; 429 `code_locked` (5 essais) ; 500 `activation_failed` (code consommé, mot de passe non posé : réémettre un code). `verify_jwt = false`, CORS limité à `ALLOWED_ORIGIN`.
+
+**Réglages d'instance Auth requis (auto-hébergé) :** inscription publique désactivée (`GOTRUE_DISABLE_SIGNUP=true` : seuls les comptes créés par `pointage_api` existent), longueur minimale du mot de passe 12, aucune exigence de caractères (sinon l'activation échoue avec `activation_failed`), confirmation de courriel inutile (comptes créés confirmés).

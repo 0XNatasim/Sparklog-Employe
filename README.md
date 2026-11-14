@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.14.0
+# Sparklog-Employés (côté 1 : pointage) — V0.15.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.14.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.15.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -48,3 +48,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.13.0 :** `pointage_api` crée le compte de connexion à adresse factice (`<numéro>@pointage.invalid`, mot de passe aléatoire jamais montré) avant l'action `register_account` ; numéro validé (1000 à 999999), relance sans compte orphelin, compte retiré si l'action échoue, 409 si le numéro existe. 9 tests de plus (33), contrat mis à jour dans `docs/api-cote2.md`.
 
 **V0.14.0 :** fonction Edge `activate_account` (première connexion : numéro d'employé + code d'activation + mot de passe choisi de 12 à 72 caractères ; code vérifié et consommé par `consume_activation_code`, puis mot de passe posé sur le compte à adresse factice ; réponses 401 générique / 410 expiré / 429 bloqué ; CORS limité à `ALLOWED_ORIGIN`), `src/lib/activate-account.test.js` (10 tests). L'écran de connexion de l'app n'est pas encore branché dessus.
+
+**V0.15.0 :** écran de connexion par numéro d'employé (`src/pages/Login.jsx`, `src/lib/employee-login.js`) : numéro + mot de passe (adresse factice `<numéro>@pointage.invalid` jamais affichée) ou, la première fois, numéro + code d'activation + mot de passe choisi via `activate_account`, puis connexion directe. Retirés : inscription libre, courriel, « mot de passe oublié » par courriel, page `ResetPassword` et sa route (un nouveau code vient de la gestion). Textes `login.*` (FR / EN). Tests : `Login.test.jsx` (7), `employee-login.test.js` (10).

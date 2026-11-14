@@ -59,12 +59,10 @@ describe("phone push outcome (V2.4.172)", () => {
     expect(pushOutcome(null)).toBeNull();
   });
 
-  it("signs out this device only, keeps the global sign-out after a password change, and shows every push outcome", () => {
+  it("signs out this device only, and shows every push outcome", () => {
     const auth = read("../contexts/AuthProvider.jsx");
     expect(auth).toContain('supabase.auth.signOut({ scope: "local" }),');
     expect(auth).not.toMatch(/supabase\.auth\.signOut\(\)/);
-    // A new password must still close every other session.
-    expect(read("../pages/ResetPassword.jsx")).toMatch(/withTimeout\(supabase\.auth\.signOut\(\), 8000\)/);
     for (const file of ["../components/manager/TodoInbox.jsx", "../components/EmergencyTimesheet.jsx"]) {
       const src = read(file);
       expect(src, file).toContain("pushOutcome(");
