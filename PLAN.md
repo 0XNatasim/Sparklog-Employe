@@ -143,7 +143,7 @@ renforcé.**
 - [ ] **0.3** **D4 tranchée (2026-11-14) : Supabase auto-hébergé.** Reste à choisir le **fournisseur d'infrastructure** québécois (voir 2bis.1) et à nommer la personne responsable de l'exploitation (2bis.9).
   Vérifier la région disponible chez Supabase **[À VÉRIFIER : région `ca-central-1` (Montréal) ou équivalent]**.
 - [ ] **0.4** Décider **D2** (écran de gestion servi par le côté 2 — *recommandé et supposé par ce plan*) et **D3** (moteur d'heures : copie versionnée avec parité, ou appel du côté 1).
-- [ ] **0.5** Décider **D5** (l'export Google Sheet : retiré ou reproduit côté 2) et **D7** (date de naissance, photo de la carte CCQ : supprimer ou garder côté 2).
+- [x] **0.5** **D5 décidé le 2026-11-14 (propriétaire) : l'export Google Sheet est RETIRÉ** (ni côté 1, ni côté 2 ; la fonction `push_approved_batch` et les scripts Apps Script ne sont pas repris). **D7 décidé le 2026-11-14 : on SUPPRIME la date de naissance et la carte CCQ** (photo et date d'expiration) : elles ne sont ni migrées ni reproduites côté 2. Test : `src/lib/decisions.test.js` (côté 2).
 - [ ] **0.6** Créer un **nouveau projet** de base de données pour le côté 2 (voir étape 2) et noter la région **dans OFFICIEL.md** (section 10, Sparklog).
 
 **Livrable testable.** Un document « Décisions D1 à D7 » signé (date, qui a décidé, sur quelle base) dans `OFFICIEL.md` du dépôt Sparklog.
@@ -153,6 +153,8 @@ renforcé.**
 **Retour arrière.** Sans objet (aucun changement de système).
 
 ---
+
+> **Décision D8 (2026-11-14, propriétaire) : le côté 2 est hébergé comme le côté 1** : Supabase auto-hébergé, serveur au Québec, même fournisseur d'infrastructure (D4, étape 2bis). Interprétation retenue (à confirmer) : **une pile Supabase DISTINCTE** (base, Auth, Storage, clés JWT et clé de service propres), même fournisseur, voire même serveur si le fournisseur choisi l'exige, mais **conteneurs, volumes et secrets séparés** : une fuite d'un côté ne doit jamais donner l'autre (invariants I1 et I4). Le front du côté 2 se déploie séparément, sur son propre sous-domaine.
 
 ## Étape 1 — Squelette du dépôt côté 2
 
@@ -436,7 +438,7 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 | `employee_tax_profiles` | idem | TD1 / TP-1015.3 |
 | `payroll_period_ledger`, `payroll_ytd`, `employer_contributions`, `roe_history` | idem | Cumuls : vérifier par totaux |
 | `payroll_rates`, `statutory_rate_sets`, `ccq_rate_snapshots`, `travel_pay_rules`, `conges_indemnity_rate`, `payroll_employer_settings` | idem | Étape 6.5 |
-| `employee_forms`, `employee_form_access`, `profile_references`, cartes CCQ (bucket) | idem | Décision D7 sur la carte CCQ et la date de naissance |
+| `employee_forms`, `employee_form_access`, `profile_references` | idem | **D7 : cartes CCQ (bucket) et date de naissance supprimées, non migrées** |
 | `employee_time_off` | idem | **Décidé : gestion** (2026-11-14) |
 | `messages`, `message_recipients`, `manager_broadcasts`, `broadcast_recipients`, `broadcast_revisions` | idem | Annonces (courriels) |
 | `accident_log`, `accident_files` (bucket) | idem | Noms, CNESST |
@@ -497,7 +499,7 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 - **Perte de la réponse après validation** : le rejeu avec la même `action_key` renvoie le résultat enregistré côté 1 (étape 3.4) ; on ne refait jamais l'effet.
 
 **9.2 Approuver.** L'écran « À traiter » écrit `approve_jobs` avec les fiches et leurs `expected_version`. Réponse typée **par fiche** (comme `push_approved_batch`) : `approved`, `already_approved`, `conflict`, `not_found`. Une fiche en conflit reste affichée avec le message « modifiée depuis, à revoir ».
-- **Export vers l'ancienne feuille Google** : selon D5 ; tant qu'il existe, il part du côté 2 (étape 12.4).
+- **Export vers l'ancienne feuille Google** : **retiré (D5, 2026-11-14)** ; l'approbation ne déclenche aucun export.
 
 **9.3 Retourner.** `return_job` / `return_foreman_note_sheet` avec la raison filtrée (étape 3.5). L'employé voit la fiche retournée dans le côté 1 (par numéro) ; la raison est visible des autres gestionnaires dans le côté 2 (pas de nom dans le texte).
 
@@ -587,7 +589,7 @@ Livrable : tests de rejeu (un code ne marche qu'une fois), d'expiration, de bloc
 - [ ] **12.1** **Courriels** (annonces) : l'envoi part du côté 2 (il connaît les adresses) ; fournisseur au Canada, avec entente ; les courriels n'embarquent jamais de fiche de temps.
 - [ ] **12.2** **Notifications push** : abonnement lié au **numéro** côté 1 ; le contenu n'a pas de nom (« Une de vos fiches a été retournée »). Retrait de `user_agent`.
 - [ ] **12.3** **OCR des captures** (OCR.space aujourd'hui, depuis le navigateur) : remplacer par un service au Canada ou un traitement local ; tant que ce n'est pas fait, avertir l'employé et ne jamais envoyer de capture contenant un nom.
-- [ ] **12.4** **Export Google Sheet** (décision D5) : retiré ou reproduit côté 2. Si conservé : le côté 2 appelle le `doPost` avec les **noms** (c'est un outil de gestion) ; le côté 1 ne parle plus à Google.
+- [x] **12.4** ~~Export Google Sheet~~ : **retiré (D5, décidé le 2026-11-14)**. Rien à faire ; le mettre à jour dans la paie si un rapport remplaçant est voulu (talons, DAS et rapports se font côté 2).
 - [ ] **12.5** **CCQ** (export JSON mensuel) : généré côté 2 (il connaît les NAS) ; le côté 1 ne contient aucun NAS.
 - [ ] **12.6** Mettre à jour la liste des sous-traitants dans la politique de confidentialité et dans l'évaluation (ÉFVP).
 
