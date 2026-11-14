@@ -37,6 +37,23 @@
 > CI, version, tests et documentation comme à l'étape 1. Livrable : le pointage fonctionne de bout en bout avec des numéros d'employé et des adresses factices.
 >
 > **Invariants :** les sept invariants (I1 à I7) s'appliquent à `Sparklog-Employés`. Ils sont atteignables puisque le dépôt est nouveau.
+>
+> ## Révision du 2026-11-14 (3) — cinq idées retenues d'une proposition externe
+>
+> Une proposition d'architecture (rédigée par un autre assistant) a été comparée à ce plan. On **garde ce plan** (il couvre tout le domaine : fiches par OT, kilométrage, preuves, repas, stationnement,
+> inventaire, règles CCQ, approbation, paie) et on **y ajoute** cinq idées :
+>
+> | # | Idée retenue | Où dans ce plan |
+> |---|--------------|-----------------|
+> | 1 | **Codes d'activation** à usage unique (hachés, durée limitée, essais limités) à la place d'un NIP temporaire ; le numéro d'employé n'est **jamais** un mot de passe | 5.7, 9.4 |
+> | 2 | **Journaux minimaux** : pas d'IP complète, ni nom, ni courriel, ni numéro RH, ni jeton dans les métadonnées ; vérifier ce que l'hébergeur garde de son côté | 3.6, 10.8 |
+> | 3 | **CSV d'abord**, automatisation ensuite pour l'échange des heures | 4.0 |
+> | 4 | **Couche d'authentification séparée** de la logique de pointage (changer de méthode de connexion sans tout refaire) ; passkeys possibles **plus tard**, pas au départ | 10.1 |
+> | 5 | **Les corrections n'écrasent jamais l'original** : piste d'audit prouvée par un test | 10.9 |
+>
+> **Idées écartées, et pourquoi :** remplacer les fiches par des « sessions de travail » et des pauses (Sparklog n'a pas de boutons de pointage et le domaine est plus large) ; ajouter un UUID en plus du numéro d'employé
+> (la convention prévoit un numéro d'employé ; le numéro aléatoire du côté 2 joue ce rôle, **à confirmer à l'étape 0**) ; supposer un système RH existant (c'est le côté 2) ; imposer les passkeys (support jugé
+> expérimental chez Supabase, **non vérifié**, et charge de soutien pour environ 150 employés).
 
 ---
 
@@ -236,8 +253,8 @@ Règles du contrat :
 - `return_job` — retourne une fiche pour correction avec `reason` (≤ 500 caractères, voir 3.5) ; même logique que `return_job_for_correction`.
 - `return_foreman_note_sheet` — idem pour les fiches de contremaître (0140).
 - `set_pause` — mettre en pause / réactiver un numéro.
-- `create_account` — créer « numéro + NIP » côté 1, sans nom (étape 9.4).
-- `reset_pin` — nouveau NIP temporaire pour un numéro.
+- `create_account` — créer le compte « numéro » côté 1, sans nom, avec un code d'activation (étape 9.4).
+- `reissue_activation_code` — nouveau code d'activation pour un numéro (étape 9.4).
 - `unlock_day` — rouvrir une journée pour un numéro ou pour tous (reprend `UnlockDayManager`).
 - Table `sync_actions` (`action_key` **unique**, `type`, `result`, `created_at`) : un rejeu renvoie le **résultat enregistré**, sans refaire l'action.
 - `expected_version` : si la fiche a changé depuis, la réponse est `conflict` avec la version actuelle (ceci règle aussi le point ouvert **S-4** de Sparklog).
@@ -246,7 +263,12 @@ Règles du contrat :
 - côté 2, **avant l'envoi** : le champ `reason` passe par un filtre qui bloque les noms et courriels connus du côté 2 (liste générée depuis `people`) ;
 - côté 1 : avertissement affiché à l'employé sous les champs libres (« n'écrivez pas de nom »).
 
-**Livrable testable (dans Sparklog).** Tests Vitest qui lisent le SQL (même style que `manager-entry.test.js`) : la route n'expose aucun champ de la liste interdite ; un rejeu d'`approve_jobs` renvoie le même résultat ; une version périmée renvoie `conflict` ; un secret révoqué renvoie 401.
+**3.6 Journalisation minimale (idée 2).**
+- Les lignes d'audit de l'API (3.1) contiennent : client, route, nombre de lignes, durée, code de résultat. **Pas** d'IP complète (au besoin, un préfixe tronqué), **pas** d'empreinte d'appareil, **pas** de nom, courriel, numéro RH ni jeton.
+- Les champs `metadata` (JSON) de tous les journaux passent par une liste de clés **permises** ; toute autre clé est rejetée par un trigger.
+- **À vérifier avant de promettre :** ce que l'hébergeur garde lui-même (journaux d'authentification, d'API et de base : IP, appareils, durée de conservation) et ce qui peut être réduit ; le noter dans `OFFICIEL.md`.
+
+**Livrable testable (dans Employés).** Tests Vitest qui lisent le SQL (même style que `manager-entry.test.js`) : la route n'expose aucun champ de la liste interdite ; un rejeu d'`approve_jobs` renvoie le même résultat ; une version périmée renvoie `conflict` ; un secret révoqué renvoie 401.
 
 **Critère de sortie.** Une requête `curl` avec le secret renvoie des fiches pour un numéro de test ; sans secret ou avec un secret révoqué, 401 ; l'audit montre chaque appel.
 
@@ -257,6 +279,13 @@ Règles du contrat :
 ## Étape 4 — Synchronisation en lecture (le côté 2 lit le côté 1)
 
 **Objectif.** Un miroir des fiches du côté 1 dans la base du côté 2, à jour en quelques minutes, sans doublon, sans trou.
+
+**4.0 Démarrage par CSV (idée 3).** Avant toute lecture automatique :
+1. Le côté 1 offre un **export CSV des fiches approuvées** (`employee_number, job_date, depart, fin, km_aller, km_retour, km_total, return_time_minutes, ot, status, job_id, updated_at`), protégé contre les formules (`=`, `+`, `-`, `@`), téléchargé par un gestionnaire.
+2. Le côté 2 importe ce fichier avec **la même logique** que la lecture automatique (upsert conditionnel sur `job_id` et `updated_at`, rapport de l'import : lignes reçues / changées / ignorées / rejetées).
+3. Le fichier est **supprimé** après l'import ; aucun CSV n'est conservé dans un dépôt, un courriel ou un dossier partagé.
+4. Quand l'import manuel est fiable (deux semaines sans écart), **brancher** la lecture automatique (4.1 à 4.4) sur le même code d'import. Le CSV reste le plan de secours.
+Livrable : un CSV de test importé deux fois = aucun doublon ; une ligne invalide est rejetée avec son motif, sans arrêter le reste.
 
 **4.1 Tâche planifiée.** Fonction `sync_jobs` (Edge Function planifiée, toutes les **10 minutes**, plus un passage complet **chaque nuit**) :
 1. lire `sync_state.cursor` (début : `null`) ;
@@ -297,6 +326,8 @@ Règles du contrat :
 - [ ] **5.4** Décision sur les nouveaux employés : le numéro est attribué **dans le côté 2** à la création de la personne (étape 9.4).
 - [ ] **5.5** Le contrat de l'étape 3 expose maintenant le vrai `employee_number` (avant : `null` toléré).
 - [ ] **5.6** Document interne (hors dépôt) : où est la sauvegarde de la table numéro ↔ personne, qui y a accès, comment elle est chiffrée.
+
+- [ ] **5.7** Le numéro d'employé **n'est jamais** un secret ni un mot de passe : il identifie, il n'authentifie pas. Il ne sert qu'avec un code d'activation (9.4) puis un mot de passe choisi par l'employé (ou plus tard une passkey, 10.1).
 
 **Livrable testable.** Test : la fonction qui crée une personne attribue un numéro unique et refuse d'en réutiliser un ; une requête sur le côté 1 ne montre que des numéros.
 
@@ -410,10 +441,14 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 
 **9.3 Retourner.** `return_job` / `return_foreman_note_sheet` avec la raison filtrée (étape 3.5). L'employé voit la fiche retournée dans le côté 1 (par numéro) ; la raison est visible des autres gestionnaires dans le côté 2 (pas de nom dans le texte).
 
-**9.4 Comptes.**
-- `create_account` : le côté 2 crée la personne (`people`), attribue le numéro, génère un **NIP temporaire** aléatoire, appelle le côté 1 (qui crée « numéro + NIP » avec une adresse factice `<numéro>@pointage.invalid`). Le NIP est remis à l'employé **hors système** (en personne ou par message du côté 2) et doit être changé à la première connexion.
-- `reset_pin` : même chemin ; remplace le « mot de passe oublié » par courriel.
-- `set_pause` : met un numéro en pause (comportement actuel de `is_paused`).
+**9.4 Comptes et codes d'activation (idée 1).**
+- `create_account` : le côté 2 crée la personne (`people`) et attribue le numéro (5.2). Il appelle le côté 1, qui crée le compte « numéro » avec une adresse factice `<numéro>@pointage.invalid` **sans mot de passe utilisable**, et génère un **code d'activation**.
+- **Code d'activation :** aléatoire (au moins 10 caractères, sans caractères ambigus), généré côté 1 ; seul son **condensat** (`argon2` ou équivalent) est stocké, avec `expires_at` (72 h), `used_at`, `attempts`. **Usage unique** ; après 5 essais ratés, le code est bloqué ; blocage par numéro et par appareil (limite de débit).
+- Le code clair est affiché **une seule fois** au gestionnaire (côté 2), qui le remet à l'employé **hors système** (en personne ou par un canal déjà utilisé par l'entreprise). Le côté 1 ne l'envoie à personne et ne le journalise pas.
+- **Activation :** l'employé entre son numéro et le code ; il **choisit son mot de passe** (règles du projet : minuscule, majuscule, chiffre, symbole, mot de passe divulgué refusé) ; le code est consommé ; une ligne d'audit « compte activé » (par numéro).
+- `reissue_activation_code` (ex-`reset_pin`) : même chemin, l'ancien code et l'ancien mot de passe sont invalidés ; **aucun** « mot de passe oublié » par courriel.
+- `set_pause` : met un numéro en pause (comportement actuel de `is_paused`) ; les sessions ouvertes sont révoquées.
+Livrable : tests de rejeu (un code ne marche qu'une fois), d'expiration, de blocage après essais, et de non-journalisation du code clair.
 
 **9.5 Journal.** Chaque action écrit une ligne d'audit **dans les deux côtés** (côté 1 : numéro et type ; côté 2 : personne, numéro, type, résultat).
 
@@ -431,7 +466,7 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 
 > Étape dans le dépôt **Sparklog**. C'est la plus risquée : elle retire des données. Elle ne commence qu'après un **instantané vérifié** et après que les étapes 8 et 9 ont tourné **au moins deux semaines** en production sans écart.
 
-**10.1 Connexion.** Identifiant = numéro + NIP ; adresses factices dans `auth.users` ; écran `Login.jsx` demande « numéro d'employé » ; `ResetPassword.jsx` remplacé par « demandez un nouveau NIP à la gestion ». Gestionnaires : numéro + mot de passe + TOTP (`MfaGate` inchangé).
+**10.1 Connexion (idée 4).** Identifiant = numéro + mot de passe choisi à l'activation (9.4) ; adresses factices dans `auth.users` ; écran `Login.jsx` demande « numéro d'employé » ; `ResetPassword.jsx` remplacé par « demandez un nouveau NIP à la gestion ». Gestionnaires : numéro + mot de passe + TOTP (`MfaGate` inchangé). **Couche d'authentification séparée :** un module `src/lib/auth-adapter.js` est le **seul** endroit qui parle au fournisseur d'authentification (connexion, session, déconnexion, activation) ; les écrans n'appellent plus `supabase.auth` directement. Ainsi, une passkey (WebAuthn) pourra être ajoutée **plus tard** comme méthode de plus sans toucher au pointage. Prérequis avant de l'envisager : vérifier l'état de son support chez l'hébergeur, prévoir la perte ou le changement de téléphone, et un chemin de repli par code d'activation.
 
 **10.2 Colonnes à retirer ou vider** (liste de départ, à confirmer par inventaire) : `profiles.full_name`, `email`, `phone`, `birth_date`, taux horaires, options de **paie** ; `push_subscriptions.user_agent`.
   Les options qui changent **le temps** (`first_trip_unpaid`, `ten_hour_days`, `km_apart_from_capture`, `team_leader_*`, `overtime_first_hour_double`) **restent**.
@@ -453,6 +488,10 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 - aucune table de paie ou de taux ;
 - `auth.users` : uniquement des adresses factices.
 
+**10.8 Journaux sans données inutiles (idée 2).** Réécrire les triggers d'audit pour n'enregistrer que les clés permises (3.6) ; purger les IP et empreintes déjà présentes dans les journaux copiés ; fixer une durée de conservation des journaux (D6).
+
+**10.9 Corrections sans écrasement (idée 5).** Une fiche déjà soumise, approuvée ou exportée ne se réécrit jamais en place : toute modification (par l'employé après un retour, ou par un gestionnaire) crée une **ligne d'historique** (ancienne valeur, nouvelle valeur, auteur par numéro, motif standardisé, heure du serveur) que le navigateur ne peut ni modifier ni supprimer. **Test :** modifier une fiche approuvée par une requête directe échoue ; une correction légitime laisse la valeur d'origine retrouvable. À vérifier d'abord ce que `audit_log` et `return_job_for_correction` couvrent déjà, et ne combler que l'écart.
+
 **Critère de sortie.** Le scan renvoie 0 ligne ; les tests d'écran affichent des numéros ; la connexion par numéro fonctionne pour employés et gestionnaires ; l'employé retrouve ses fiches.
 
 **Retour arrière.** Restauration de l'instantané (voir 10.6). C'est pourquoi on vide d'abord, on supprime ensuite.
@@ -466,7 +505,7 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 **Tâches précises :**
 - [ ] **11.1** Nouveau projet de base de données dans la région choisie (étape 0.3) ; mêmes migrations rejouées dans l'ordre ; extensions identiques ; secrets Edge recréés.
 - [ ] **11.2** Copie des données (fiches, preuves, inventaire) par agrégats vérifiés ; copie des **objets** de stockage (preuves de temps supp., reçus, captures d'inventaire) ; recalcul des chemins si nécessaire.
-- [ ] **11.3** Jetons d'accès : les comptes factices se recréent avec un NIP temporaire **ou** la table `auth.users` est migrée avec ses condensats (selon la capacité de l'hébergeur ; vérifier avant de promettre).
+- [ ] **11.3** Jetons d'accès : les comptes factices se recréent avec un code d'activation (9.4) **ou** la table `auth.users` est migrée avec ses condensats (selon la capacité de l'hébergeur ; vérifier avant de promettre).
 - [ ] **11.4** Variables d'environnement du front (`VITE_SUPABASE_URL`, clé publique) changent à la bascule ; la PWA se met à jour (`UpdateBanner`) ; les anciens abonnements push sont recréés.
 - [ ] **11.5** Le côté 2 change l'URL de l'API du côté 1 **à un seul endroit** (`SYNC_BASE_URL`) et le secret est roté.
 - [ ] **11.6** Fenêtre de bascule un **dimanche** (aucune saisie), annonce aux employés 48 h avant ; la période de nuit change d'heure ne doit pas tomber dans la fenêtre.
@@ -567,6 +606,9 @@ Ce plan suppose l'**option B pour les montants** (qui n'ont jamais été dans le
 - La **région canadienne** disponible chez l'hébergeur et la possibilité de **migrer `auth.users` avec les condensats** (étape 11.3).
 - La façon de déplacer les **secrets du coffre** (NAS) entre projets (étape 7.3).
 - Le sort des **groupes / entrepôts** (étape 7, tableau) et du **temps libre** (`employee_time_off`).
+- Ce que l'**hébergeur garde dans ses propres journaux** (IP, appareils, durée) et ce qu'on peut en réduire (3.6).
+- L'état du **support des passkeys** chez l'hébergeur (jugé expérimental dans une source externe, non vérifié ici).
+- Si la **convention** accepte le numéro d'employé tel quel comme identifiant (hypothèse de ce plan) ou exige une couche d'identifiant technique de plus : question 2 de l'étape 0.1.
 - La **charge réelle** : les durées sont des estimations, à revoir après l'étape 4 (mesure du backfill) et l'étape 6 (écarts de parité).
 
 ## Annexe D — Définition de « terminé » pour chaque étape
