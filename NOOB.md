@@ -1,10 +1,10 @@
-# NOOB — Sparklog-Employés (V0.13.0)
+# NOOB — Sparklog-Employés (V0.14.0)
 
 **Ce que c'est :** la moitié « pointage » de Sparklog, en train d'être construite dans un nouveau dépôt. L'autre moitié (noms, paie) est dans `Sparklog-Gestion`.
 
 **Ce que vous voyez maintenant :** rien de nouveau pour les employés. Ce dépôt n'est **pas** utilisé en production : Sparklog (l'ancien dépôt) tourne toujours.
 
-**Ce qui a été fait (V0.13.0) :** le code du pointage a été copié de Sparklog, et les écrans de gestion et de paie ont été retirés (ils sont dans Sparklog-Gestion).
+**Ce qui a été fait (V0.14.0) :** le code du pointage a été copié de Sparklog, et les écrans de gestion et de paie ont été retirés (ils sont dans Sparklog-Gestion).
 
 **V0.11.0 :** documentation seulement — `PLAN.md` complété (codes d'activation, journaux minimaux, CSV d'abord, couche d'authentification séparée, corrections sans écrasement). Aucun code changé.
 
@@ -47,3 +47,5 @@
 **V0.12.0 :** **la porte d'entrée du côté 1 pour le côté 2 est écrite et testée** (fonction `pointage_api`). C'est le seul chemin par lequel Sparklog-Gestion lira les fiches et enverra ses ordres (approuver, retourner, pause, créer un compte). Elle vérifie un secret, refuse tout ce qui est mal formé, limite les essais, répond des erreurs claires sans jamais montrer de texte technique, et ne garde dans son journal que la route et le code de réponse (ni secret, ni contenu). Le contrat complet est dans `docs/api-cote2.md`. **Une correction :** la lecture des suppressions pouvait sauter une ligne ; elle est réparée. **Reste à faire :** créer le compte de connexion à adresse factice avant d'enregistrer un employé, puis la connexion par numéro. **Rien ne change pour les employés.**
 
 **V0.13.0 :** **l'enregistrement d'un nouvel employé est complet côté 1.** Quand Sparklog-Gestion demande de créer un employé, le côté 1 crée un compte de connexion à adresse **factice** (le numéro suivi de `@pointage.invalid`, avec un mot de passe aléatoire que personne ne voit), le profil minimal et un **code d'activation** montré **une seule fois**. L'employé choisira lui-même son mot de passe avec ce code. Une relance ne crée pas de compte en double, et un échec retire le compte créé. **Reste à faire :** l'écran de connexion par numéro et code d'activation. **Rien ne change pour les employés.**
+
+**V0.14.0 :** **l'activation du compte par l'employé est écrite et testée** (côté serveur). L'employé recevra de la gestion son **numéro** et un **code de 10 caractères** (valable 72 h, 5 essais, une seule fois). Avec eux, il **choisit son mot de passe** (12 caractères ou plus, une phrase fait très bien ; il ne peut pas contenir son numéro ni son code). Ensuite il se connecte avec son numéro et son mot de passe. Un code faux, déjà utilisé ou inconnu donne la même réponse (on ne révèle pas si un numéro existe) ; un code expiré ou bloqué est annoncé, la gestion en redonne un. **Si la pose du mot de passe échoue** après la vérification, le code est brûlé : la gestion en réémet un. **Reste à faire :** l'écran de connexion de l'app (numéro + mot de passe, écran d'activation). **Rien ne change pour les employés tant que l'écran n'est pas branché.**
