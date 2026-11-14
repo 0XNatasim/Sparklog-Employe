@@ -58,6 +58,18 @@ Total maximal : somme des poids × 5 = **95**. Un fournisseur qui passe tous les
 | **Une entreprise locale québécoise** de serveurs privés | selon l'offre | À chercher, par recommandation de l'AECQ ou de votre comptable |
 | **Références américaines** : AWS (Montréal), Azure (Québec), Google Cloud (Montréal) | infonuagique | **Exposition américaine** (G2 « non ») ; gardées seulement comme **point de comparaison** de prix et de fonctions, ou pour le plan B (Supabase infonuagique) |
 
+### Première lecture des sites publics (2026-11-14)
+
+Lu sur les **pages publiques** des fournisseurs (aucun contact, aucun contrat). **Ce sont des affirmations des fournisseurs, pas des preuves** : tout est à confirmer par écrit (section 6) avant de remplir la grille.
+
+| Fournisseur | Ce que la page dit | Ce qui manque ou inquiète |
+|-------------|--------------------|---------------------------|
+| **Cologix** | Siège à **Denver (Colorado)**. Certifié **ISO 27001** (par Schellman) pour tous ses centres de données ; évaluations tierces **SOC 1, SOC 2**, HIPAA, PCI-DSS dans toutes ses installations. Centres à **Montréal** (MTL1 à MTL12), aussi Toronto, Calgary, Vancouver et plusieurs sites américains. Offre : colocation et interconnexion | **G2 probablement « non »** : siège aux États-Unis (à confirmer : structure de propriété et filiale canadienne). Colocation : on loue de l'espace pour son propre serveur, pas un serveur clé en main (**G5** à confirmer) |
+| **eStruxture** | Centres à **Montréal** (MTL-1 à MTL-5), aussi Toronto, Vancouver, Calgary. « Cloud et colocation neutre quant aux fournisseurs de réseau » | Propriété, certifications et type d'offre (serveur loué ou colocation) **non indiqués** sur la page d'accueil (G2, G3, G5) |
+| **Hypertec** | Fondée en **1984** ; activités : calcul haute performance, centres de données hyperéchelle, refroidissement. Siège certifié BOMA BEST Or | Emplacement des centres de données, propriété, certifications et offre de serveurs **non lus** (G1, G2, G3, G5) |
+| **OVHcloud** (pages canadiennes) | Politique de certification : **ISO 27001 / 27017 / 27018**, **ISO 27701**, **HDS**, **SecNumCloud**… Met de l'avant la « souveraineté des données ». Offre de serveurs privés virtuels et dédiés | **Emplacement des centres canadiens et propriété non lus** (G1, G2) : à demander par écrit ; vérifier que la certification couvre le site canadien (portée, G3) |
+| **Canner** | Voir ci-dessus (lu le 2026-11-14) | Probablement écarté par G5 |
+
 La liste est un point de départ, **pas** une présélection : ni ownership ni certification n'ont été confirmés pour aucune de ces entreprises.
 
 ## 5. Grille à remplir
