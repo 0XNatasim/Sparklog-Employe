@@ -18,7 +18,7 @@ import { useT } from "@/lib/use-t";
 import { cn, withRetry } from "@/lib/utils";
 import { dateBandMap, lastOvertimeJobIds } from "@/lib/timesheet-layout";
 import { seenCount, unseenAnomalies, useAnomaliesFolded, useSeenAnomalies } from "@/lib/anomaly-seen";
-import { anomaliesForJobs, anomalyLimitsFromSettings, detectJobAnomalies, otReuseAnomalies, otReuseOthersText, sortAnomalies } from "@/lib/job-anomalies";
+import { anomalyLimitsFromSettings, detectJobAnomalies, otReuseAnomalies, otReuseOthersText, sortAnomalies } from "@/lib/job-anomalies";
 import { loadOtReuse } from "@/lib/ot-reuse";
 import { monthlyReportPeriod } from "@/lib/monthly-report-period";
 import LiveCrew from "@/components/LiveCrew";
@@ -58,10 +58,6 @@ function ccqWeek(dateStr) {
   const start = end.subtract(6, "day");            // Sunday
   return { key: end.format("YYYY-MM-DD"), start, end };
 }
-function weekKeyFromDate(dateStr) {
-  return ccqWeek(dateStr).key;
-}
-
 const ANOMALY_COLUMNS = "id, user_id, job_date, status, ot, depart, arrivee, fin, started_at, ended_at, km_total, km_aller, km_retour, overtime_evidence_captured";
 
 const NOTIFICATION_FILTERS = ["overtime", "meals", "parking"];
@@ -783,12 +779,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     return weekOptions.some((w) => w.key === selectedWeekKey) ? selectedWeekKey : weekOptions[0].key;
   }, [weekOptions, selectedWeekKey]);
 
-  const submittedForSelectedWeek = useMemo(() => {
-    if (!split || !selectedEmployee) return [];
-    if (weekOptions.length === 0) return [];
-    return split.submitted.filter((j) => weekKeyFromDate(j.job_date) === effectiveWeekKey);
-  }, [split, selectedEmployee, effectiveWeekKey, weekOptions.length]);
-
   function labelForUserId(userId) {
     const employee = profiles.get(userId);
     return employeeLabel(employee) || `User ${String(userId).slice(0, 8)}…`;
@@ -804,15 +794,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
       fin: String(anomaly.fin || "").slice(0, 5),
       others: otReuseOthersText(anomaly.others, { t, formatDate: (d) => dayjs(d).format("DD MMM") }),
     });
-  }
-
-  // Non-blocking warning: returns "" when the batch is clean, otherwise the text to confirm.
-  function anomalyWarning(jobIds) {
-    const hits = anomaliesForJobs(activeAnomalies, jobIds);
-    if (hits.length === 0) return "";
-    const lines = hits.slice(0, 5).map((anomaly) => `• ${labelForUserId(anomaly.userId)} · ${dayjs(anomaly.jobDate).format("DD MMM")} · ${describeAnomaly(anomaly)}`);
-    if (hits.length > 5) lines.push("…");
-    return t("manager.confirm.anomalies", { count: hits.length, list: lines.join("\n") });
   }
 
   function openAnomaly(anomaly) {
@@ -833,68 +814,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
       const next = new URLSearchParams(searchParams);
       next.delete("job");
       setSearchParams(next, { replace: true });
-    }
-  }
-
-  // Every approval asks first (V2.4.147); an anomaly is added to the question.
-  async function approve(jobId) {
-    const warning = anomalyWarning([jobId]);
-    const target = [...jobs, ...overtimeJobs, ...parkingJobs, ...notificationMealJobs].find((x) => x.id === jobId);
-    const who = profiles.get(target?.user_id);
-    const question = t("confirm.approveJob", {
-      name: employeeLabel(who) || "",
-      date: target?.job_date ? dayjs(target.job_date).format("ddd D MMM") : "",
-      ot: target?.ot || "",
-    });
-    if (!(await confirm(warning ? `${question}\n\n${warning}` : question))) return;
-    setActionLoadingId(jobId);
-    setErr(""); setInfo("");
-    try {
-      const job = [...jobs, ...overtimeJobs, ...parkingJobs, ...notificationMealJobs].find((x) => x.id === jobId);
-      if (!job) throw new Error(t("manager.errors.jobNotFound"));
-
-      const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
-      if (sessErr) throw sessErr;
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) throw new Error(t("manager.errors.noSession"));
-
-      // Use the same maintained endpoint as weekly approvals. The legacy
-      // single-job function can be absent from older deployments, which makes
-      // the Functions client return only a generic non-2xx error.
-      const { data, error: fnErr } = await invokeWithTimeout("push_approved_batch", {
-        body: { job_ids: [jobId] },
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (fnErr) throw new Error(await getFunctionErrorMessage(fnErr));
-      if (data?.ok !== true) {
-        throw new Error(data?.error || t("manager.errors.exportFailed"));
-      }
-
-      // Trust the edge fn's ATOMIC per-job result — never force-approve locally (C-2).
-      // The fn already sets approved+locked+exported for jobs it exports. A job it could
-      // not export because its STATE CHANGED (e.g. the employee edited it → 'updated')
-      // must be reloaded and re-reviewed, NOT silently approved+locked.
-      //   exported | already_exported → genuinely approved
-      //   state_changed | already_claimed | not_found → stale, re-review
-      const outcome = Array.isArray(data.results)
-        ? data.results.find((r) => r.job_id === jobId)?.outcome
-        : (Number(data.exported || 0) >= 1 ? "exported" : "state_changed"); // safe fallback for old fn
-      const isApproved = outcome === "exported" || outcome === "already_exported";
-
-      if (isApproved) {
-        setInfo(outcome === "already_exported" ? t("manager.toasts.approvedSkipped") : t("manager.toasts.approvedAndExported"));
-        const markApproved = (rows) => rows.map((row) => row.id === jobId ? { ...row, status: "approved", locked: true } : row);
-        setOvertimeJobs(markApproved);
-        setParkingJobs(markApproved);
-        setNotificationMealJobs(markApproved);
-      } else {
-        setErr(t("manager.errors.jobChangedReReview"));
-      }
-      await load();
-    } catch (e) {
-      setErr(e?.message || t("manager.errors.approveFailed"));
-    } finally {
-      setActionLoadingId(null);
     }
   }
 
@@ -924,87 +843,11 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     }
   }
 
-  async function invokeWithTimeout(name, options, ms = 30000) {
-    return await Promise.race([
-      supabase.functions.invoke(name, options),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`${name} timed out after ${ms / 1000}s`)), ms)
-      ),
-    ]);
-  }
-
-  async function getFunctionErrorMessage(error) {
-    try {
-      const payload = await error?.context?.json();
-      return payload?.error || payload?.message || error?.message || t("manager.errors.exportFailed");
-    } catch {
-      return error?.message || t("manager.errors.exportFailed");
-    }
-  }
-
-  // Stable handlers for the memoized JobCards: they always call the latest approve/unlock
+  // Stable handlers for the memoized JobCards: they always call the latest unlock
   // without changing identity on every render.
-  const actionsRef = useRef({ approve, unlock });
-  useLayoutEffect(() => { actionsRef.current = { approve, unlock }; });
-  const approveStable = useCallback((jobId) => actionsRef.current.approve(jobId), []);
+  const actionsRef = useRef({ unlock });
+  useLayoutEffect(() => { actionsRef.current = { unlock }; });
   const unlockStable = useCallback((jobId) => actionsRef.current.unlock(jobId), []);
-
-  async function approveWeekAll() {
-    if (!selectedEmployee) return;
-    const list = submittedForSelectedWeek;
-    if (!list || list.length === 0) return;
-
-    const wk = ccqWeek(list[0].job_date);
-    const label =
-      effectiveWeekKey === "latest"
-        ? t("manager.confirm.selectedPeriod")
-        : `${t("manager.weekShort")} ${wk.start.format("DD MMM")} → ${wk.end.format("DD MMM YYYY")}`;
-
-    const warning = anomalyWarning(list.map((j) => j.id));
-    const question = t("manager.confirm.approveWeek", { name: selectedEmployee.name, label, count: list.length });
-    const ok = await confirm(warning ? `${question}\n\n${warning}` : question);
-    if (!ok) return;
-
-    const actionKey = `week:${effectiveWeekKey}`;
-    setActionLoadingId(actionKey);
-    setErr(""); setInfo("");
-
-    try {
-      const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
-      if (sessErr) throw sessErr;
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) throw new Error(t("manager.errors.noSession"));
-
-      // One invoke for the whole batch — the Edge Function fans out to
-      // Apps Script in a single POST and updates all DB rows at once.
-      const { data, error: fnErr } = await invokeWithTimeout(
-        "push_approved_batch",
-        {
-          body: { job_ids: list.map((j) => j.id) },
-          headers: { Authorization: `Bearer ${accessToken}` },
-        },
-        60000
-      );
-      if (fnErr) throw new Error(await getFunctionErrorMessage(fnErr));
-      if (data?.ok !== true) {
-        throw new Error(data?.error || t("manager.errors.approveWeekFailed"));
-      }
-
-      const approvedCount = Number(data?.exported || 0);
-      const skippedCount = Number(data?.skipped || 0);
-
-      setInfo(
-        skippedCount > 0
-          ? t("manager.toasts.approvedManySkipped", { count: approvedCount, skipped: skippedCount })
-          : t("manager.toasts.approvedManyExported", { count: approvedCount })
-      );
-      await load();
-    } catch (e) {
-      setErr(e?.message || t("manager.errors.approveWeekFailed"));
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
 
   // Days (per employee) that total more than 8h of worked time but have NO overtime
   // authorization screenshot on any of that day's jobs. Backstop for jobs entered out
@@ -1075,7 +918,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
       focused: focusedJobId === j.id,
       focusedEvidence: focusedJobId === j.id ? focusedEvidence : null,
       busy: actionLoadingId === j.id,
-      onApprove: approveStable,
       onUnlock: unlockStable,
       nameFirst,
       plainWords,
@@ -1121,7 +963,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
           {evidence?.daily_minutes ? <span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-1">{t("manager.overtime.dailyTotal")}: <b>{formatHM(evidence.daily_minutes / 60)}</b></span> : null}
           {receipt ? <span className="rounded-full border border-info/30 bg-info/10 px-2 py-1">{t("manager.parking.amount")}: <b>${Number(receipt.amount || 0).toFixed(2)}</b>{parkingReceiptPaths(receipt).length > 1 ? ` · ${t("manager.parking.pictures", { count: parkingReceiptPaths(receipt).length })}` : ""}</span> : null}
           {hasMeal ? <span className="rounded-full border border-success/30 bg-success/10 px-2 py-1">{t("manager.notifications.supper")}: <b>$30.00</b></span> : null}
-          {job.status === "submitted" && <Button type="button" size="sm" className="ml-auto" disabled={actionLoadingId === job.id} onClick={() => approve(job.id)}>{actionLoadingId === job.id ? t("common.working") : t("manager.notifications.approveJob")}</Button>}
         </div>
         {hasMeal && (
           <div className="rounded-md border border-success/30 bg-success/5 px-3 py-2 text-xs">
@@ -1157,8 +998,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
   const receiptPendingCount = useMemo(() => (reviewFilters
     ? notificationJobs.filter((job) => receiptNeedsReview(job, receiptStatus(job))).length
     : 0), [reviewFilters, notificationJobs, receiptStatus]);
-
-  const bulkBusy = typeof actionLoadingId === "string" && actionLoadingId.startsWith("week:");
 
   return (
     <>
@@ -1308,15 +1147,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
                       ))
                     )}
                   </Select>
-
-                  <Button
-                    type="button"
-                    variant="success"
-                    onClick={approveWeekAll}
-                    disabled={bulkBusy || submittedForSelectedWeek.length === 0 || weekOptions.length === 0}
-                  >
-                    {bulkBusy ? t("common.working") : t("manager.approveWeek", { count: submittedForSelectedWeek.length })}
-                  </Button>
                 </div>
               </div>
             )}

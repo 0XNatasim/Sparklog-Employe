@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalOutcome, buildInbox, previousWorkday } from "./todo-inbox";
+import { buildInbox, previousWorkday } from "./todo-inbox";
 
 const job = (id, user_id, job_date, depart, fin, extra = {}) => ({ id, user_id, job_date, depart, fin, status: "submitted", ot: id, km_total: 10, ...extra });
 const profiles = new Map([["a", { id: "a", employee_number: 1001 }], ["b", { id: "b", employee_number: 1002 }]]);
@@ -54,17 +54,5 @@ describe("previousWorkday", () => {
     // Construction vacation and Christmas: the first day back looks past the whole shutdown.
     const winter = ["2026-12-21", "2026-12-22", "2026-12-23", "2026-12-24", "2026-12-25", "2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31", "2027-01-01"];
     expect(previousWorkday("2027-01-04", winter)).toBe("2026-12-18");
-  });
-});
-
-describe("approvalOutcome", () => {
-  it("trusts the per-job results: exported or already exported are approved", () => {
-    const data = { ok: true, results: [{ job_id: "a", outcome: "exported" }, { job_id: "b", outcome: "already_exported" }, { job_id: "c", outcome: "state_changed" }] };
-    expect(approvalOutcome(data, ["a", "b", "c", "d"])).toEqual({ approved: ["a", "b"], stale: ["c", "d"] });
-  });
-
-  it("falls back to counts for older deployments", () => {
-    expect(approvalOutcome({ ok: true, exported: 2 }, ["a", "b"])).toEqual({ approved: ["a", "b"], stale: [] });
-    expect(approvalOutcome({ ok: true, exported: 1 }, ["a", "b"])).toEqual({ approved: [], stale: ["a", "b"] });
   });
 });

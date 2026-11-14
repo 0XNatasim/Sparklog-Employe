@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.24.2
+# Sparklog-Employés (côté 1 : pointage) — V0.25.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.24.2, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.25.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -72,3 +72,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.24.1 :** résultat du banc d'essai Tesseract 5.3 (eng + fra, modèles « fast » d'Ubuntu) sur 14 captures Field Service réelles + 1 photo sans rapport : **mode `--psm 11` (texte épars), image brute : 14/14 captures lues sans aucune erreur** (OT, date, départ, arrivée, fin, km, miles) ; `--psm 6` / `4` / `3` : tous les champs sauf les « miles » (le contrôle de cohérence km / miles ne se ferait pas) ; agrandir ×2 ou ×3 ne sert à rien (1 à 2 OT mal lus de plus) ; la réduction à 1600 px / JPEG 70 de l'application ne nuit pas ; la photo sans rapport ne produit aucun champ (0 faux positif). Durée : environ 10 s par image sur 4 cœurs (eng + fra, 1080 × 2340) : à réduire (eng seul, image réduite) avant de décider. Limites : 14 captures dont plusieurs sont la même fiche (environ 7 fiches distinctes), un seul téléphone, aucune comparaison avec OCR.space.
 
 **V0.24.2 :** décision de la propriétaire : **OCR.space est gardé pour l'instant** ; Tesseract est noté dans `docs/ocr-tesseract.md` (résultat de l'essai, limites, essai à compléter, plan de travail si on change). Aucun code changé.
+
+**V0.25.0 :** boutons d'**approbation retirés** de la boîte « À traiter » (`TodoInbox`) et du tableau de bord (`ManagerDashboard` : approuver une fiche, approuver la semaine) : ils appelaient `push_approved_batch`, qui n'existe pas au côté 1 (l'approbation vient du côté 2, `approve_jobs`). Message « L'approbation se fait dans la gestion » ; `approvalOutcome` et 48 textes devenus inutiles retirés. Garde-fou `src/lib/side-boundaries.test.js` : le code du côté 1 n'appelle ni approbation, ni paie, ni API d'échange, ni clé de service. `docs/pret-deploiement.md` : état de préparation (prêt pour l'aperçu, pas pour la mise en service) et bloquants.

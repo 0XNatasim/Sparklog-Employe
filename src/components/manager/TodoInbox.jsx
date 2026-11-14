@@ -15,10 +15,10 @@ import { companyDate } from "@/lib/company-time";
 import { isOffOn } from "@/lib/timeoff";
 import { notSubmittedYesterday } from "@/lib/live-crew";
 import { QUERY_BUDGETS } from "@/lib/query-budgets";
-import { anomaliesForJobs, anomalyLimitsFromSettings, detectJobAnomalies, otReuseAnomalies, otReuseOthersText, sortAnomalies } from "@/lib/job-anomalies";
+import { anomalyLimitsFromSettings, detectJobAnomalies, otReuseAnomalies, otReuseOthersText, sortAnomalies } from "@/lib/job-anomalies";
 import { unseenAnomalies, useSeenAnomalies } from "@/lib/anomaly-seen";
 import EvidenceAlertBanner from "@/components/manager/EvidenceAlertBanner";
-import { approvalOutcome, buildInbox, lookbackWorkdays } from "@/lib/todo-inbox";
+import { buildInbox, lookbackWorkdays } from "@/lib/todo-inbox";
 import { loadHolidayDates } from "@/lib/company-holidays";
 import { DYNACOM_CUMULATIVE_END } from "@/lib/payroll-opening";
 import { TODO_EVENT } from "@/lib/todo-count";
@@ -185,63 +185,6 @@ export default function TodoInbox() {
     }
   }
 
-  async function functionError(error) {
-    try {
-      const payload = await error?.context?.json();
-      return payload?.error || payload?.message || error?.message;
-    } catch {
-      return error?.message;
-    }
-  }
-
-  // Approval notifications are settled once the job is approved: drop them off the bell.
-  async function markNotificationsRead(jobIds) {
-    if (!jobIds.length || !user?.id) return;
-    const { data: notifs } = await supabase.from("manager_notifications").select("id").in("job_id", jobIds);
-    const rows = (notifs || []).map((n) => ({ notification_id: n.id, manager_id: user.id }));
-    if (rows.length) await supabase.from("manager_notification_reads").upsert(rows);
-    window.dispatchEvent(new CustomEvent("sparklog:notifications-refresh"));
-  }
-
-  async function approve(key, jobIds, question) {
-    if (!jobIds.length) return;
-    if (question && !(await confirm(question))) return;
-    await run(key, async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (!token) throw new Error(t("manager.errors.noSession"));
-      const timeoutMs = jobIds.length > 1 ? 60000 : 30000;
-      const { data, error } = await Promise.race([
-        supabase.functions.invoke("push_approved_batch", { body: { job_ids: jobIds }, headers: { Authorization: `Bearer ${token}` } }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(t("todo.timeout"))), timeoutMs)),
-      ]);
-      if (error) throw new Error(await functionError(error) || t("manager.errors.approveFailed"));
-      if (data?.ok !== true) throw new Error(data?.error || t("manager.errors.approveFailed"));
-      const { approved, stale } = approvalOutcome(data, jobIds);
-      await markNotificationsRead(approved);
-      setInfo(stale.length
-        ? t("todo.toast.stale", { count: approved.length, stale: stale.length })
-        : t("todo.toast.approved", { count: approved.length }));
-    });
-  }
-
-  // Every approval asks first (V2.4.147); a day with an anomaly lists it in the question.
-  function approveDay(day) {
-    const hits = anomaliesForJobs(unseenAnomalies(state.anomalies, seenAnomalies), day.jobs.map((job) => job.id));
-    const question = hits.length
-      ? t("todo.confirm.approveAnomaly", { list: hits.map((a) => `• ${describeAnomaly(a)}`).join("\n") })
-      : t("todo.confirm.approveDay", { name: nameOf(day.userId), date: dayjs(day.date).format("ddd D MMM"), count: day.jobs.length });
-    return approve(`day:${day.key}`, day.jobs.map((job) => job.id), question);
-  }
-
-  function approveEmployee(emp) {
-    const jobIds = emp.days.flatMap((day) => day.jobs.map((job) => job.id));
-    return approve(`emp:${emp.id}`, jobIds, t("todo.confirm.approveEmployee", { count: emp.days.length, name: emp.name }));
-  }
-
-  function approveAllClean() {
-    return approve("all", inbox.cleanJobIds, t("todo.confirm.approveAll", { count: inbox.stats.cleanDays, jobs: inbox.cleanJobIds.length }));
-  }
 
   async function returnDay(day) {
     const ok = await confirm(t("todo.confirm.returnDay", { name: nameOf(day.userId), date: dayjs(day.date).format("ddd D MMM"), count: day.jobs.length }));
@@ -396,9 +339,6 @@ export default function TodoInbox() {
             </Button>
           )}
           <Button type="button" size="sm" variant="ghost" disabled={Boolean(busy)} onClick={() => returnDay(day)}>{t("todo.returnDay")}</Button>
-          <Button type="button" size="sm" disabled={Boolean(busy)} onClick={() => approveDay(day)}>
-            {busy === `day:${day.key}` ? t("common.working") : t(anomaly ? "todo.approveAnyway" : "todo.approveDay")}
-          </Button>
         </div>
       </div>
     );
@@ -416,14 +356,11 @@ export default function TodoInbox() {
         <div>
           <div className="text-sm text-muted-foreground">{state ? dayjs(state.today).format("dddd D MMMM") : ""}</div>
           <h2 className="text-2xl font-bold tracking-tight">{t("todo.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("todo.approvalOnSide2")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={refresh} disabled={loading || Boolean(busy)}>
             <RefreshCw className="mr-1.5 h-4 w-4" /> {t("todo.refresh")}
-          </Button>
-          <Button type="button" disabled={!stats?.cleanDays || Boolean(busy)} onClick={approveAllClean}>
-            <CheckCheck className="mr-1.5 h-4 w-4" />
-            {busy === "all" ? t("common.working") : t("todo.approveAllClean", { count: stats?.cleanDays || 0 })}
           </Button>
         </div>
       </div>
@@ -472,11 +409,6 @@ export default function TodoInbox() {
             <Card key={emp.id} className="overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2.5">
                 <div className="font-semibold">{emp.name}</div>
-                {emp.days.length > 1 && (
-                  <Button type="button" size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => approveEmployee(emp)}>
-                    {busy === `emp:${emp.id}` ? t("common.working") : t("todo.approveEmployee", { count: emp.days.length })}
-                  </Button>
-                )}
               </div>
               {emp.days.map((day) => renderDay(day))}
             </Card>

@@ -99,22 +99,4 @@ function sumBy(list, fn) {
 // holiday (company_holidays) is skipped like a weekend. Kept here for existing imports.
 export { lookbackWorkdays, previousWorkday } from "./workdays";
 
-// push_approved_batch's per-job results → how many were approved and which ones changed
-// under the manager (edited since, already claimed…) and must be looked at again.
-export function approvalOutcome(data, jobIds) {
-  if (!Array.isArray(data?.results)) {
-    // Older deployments return counts only: trust them only when they cover every job.
-    return Number(data?.exported || 0) + Number(data?.skipped || 0) >= jobIds.length
-      ? { approved: [...jobIds], stale: [] }
-      : { approved: [], stale: [...jobIds] };
-  }
-  const byId = new Map(data.results.map((row) => [row.job_id, row.outcome]));
-  const approved = [];
-  const stale = [];
-  for (const id of jobIds) {
-    const outcome = byId.get(id);
-    if (outcome === "exported" || outcome === "already_exported") approved.push(id);
-    else stale.push(id);
-  }
-  return { approved, stale };
-}
+
