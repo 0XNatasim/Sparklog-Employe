@@ -156,6 +156,40 @@ async function readJsonBody(request) {
   }
 }
 
+// Plage des numéros d'employé (0001_identity) et adresse factice de connexion : aucune donnée personnelle côté 1.
+export const EMPLOYEE_NUMBER_MIN = 1000;
+export const EMPLOYEE_NUMBER_MAX = 999999;
+export const FAKE_EMAIL_DOMAIN = "pointage.invalid";
+
+function randomPassword() {
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// register_account : le compte d'authentification (adresse `<numéro>@pointage.invalid`, mot de passe aléatoire jamais montré) est créé ICI, puis le profil
+// et le code d'activation par apply_sync_action. L'employé choisira son vrai mot de passe en utilisant son code. Une relance (même clé) ne laisse aucun compte orphelin.
+async function registerAccount(deps, clientId, actionKey, payload) {
+  const number = payload.employee_number;
+  if (!Number.isInteger(number) || number < EMPLOYEE_NUMBER_MIN || number > EMPLOYEE_NUMBER_MAX) return fail(422, "invalid_employee_number");
+  const created = await deps.createAuthUser(`${number}@${FAKE_EMAIL_DOMAIN}`, randomPassword());
+  const exists = !!created.error && created.error.code === "email_exists";
+  if (created.error && !exists) return fail(500, "internal_error");
+  const userId = exists ? null : created.id;
+  const args = { p_client: clientId, p_action_key: actionKey, p_type: "register_account", p_payload: { ...payload, user_id: userId } };
+  const { data, error } = await deps.rpc("apply_sync_action", args);
+  if (error || (data && data.replayed === true && userId)) {
+    // Échec ou relance : le compte qu'on vient de créer ne sert à rien, on le retire (un échec du retrait ne change pas la réponse).
+    if (userId) { try { await deps.deleteAuthUser(userId); } catch { /* compte orphelin sans profil : sans effet, retiré au ménage */ } }
+  }
+  if (error) {
+    // Adresse déjà prise sans relance reconnue : le numéro existe.
+    if (exists && error.code === "23502") return fail(409, "employee_number_taken");
+    return errResponse(error);
+  }
+  return json(200, { ok: true, result: data });
+}
+
 export async function handle(request, deps) {
   const route = routeOf(request.url);
   const log = (status) => { try { deps.log?.({ route, status }); } catch { /* le journal ne bloque jamais une réponse */ } };
@@ -177,6 +211,7 @@ export async function handle(request, deps) {
     if (!UUID_RE.test(String(actionKey || ""))) return done(fail(422, "invalid_action_key"));
     if (!ACTION_TYPES.includes(type)) return done(fail(422, "unknown_action_type"));
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return done(fail(422, "invalid_payload"));
+    if (type === "register_account") return done(await registerAccount(deps, auth.clientId, actionKey, payload));
     const { data, error } = await deps.rpc("apply_sync_action", { p_client: auth.clientId, p_action_key: actionKey, p_type: type, p_payload: payload });
     if (error) return done(errResponse(error));
     return done(json(200, { ok: true, result: data }));

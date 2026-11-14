@@ -241,6 +241,92 @@ describe("actions", () => {
   });
 });
 
+describe("register_account : compte à adresse factice", () => {
+  const body = (extra = {}) => ({ action_key: KEY, type: "register_account", payload: { employee_number: 4821, role: "employee", ...extra } });
+  const withAuth = (over = {}) => {
+    const created = []; const deleted = [];
+    const deps = makeDeps(over.deps);
+    deps.createAuthUser = async (email, password) => { created.push({ email, password }); return over.create ?? { id: "44444444-4444-4444-8444-444444444444", error: null }; };
+    deps.deleteAuthUser = async (id) => { deleted.push(id); if (over.deleteFails) throw new Error("x"); };
+    return { deps, created, deleted };
+  };
+
+  it("crée le compte à l'adresse factice, passe son identifiant au profil et ne montre jamais le mot de passe", async () => {
+    const { deps, created, deleted } = withAuth({ deps: { responses: { apply_sync_action: { data: { employee_number: 4821, role: "employee", code: "ABCDEFGHJK" }, error: null } } } });
+    const r = await read(await handle(post(body()), deps));
+    expect(r.status).toBe(200);
+    expect(r.body.result.code).toBe("ABCDEFGHJK");
+    expect(created).toHaveLength(1);
+    expect(created[0].email).toBe("4821@pointage.invalid");
+    expect(created[0].password).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(r.body)).not.toContain(created[0].password);
+    expect(dataCalls(deps)[0].args.p_payload).toEqual({ employee_number: 4821, role: "employee", user_id: "44444444-4444-4444-8444-444444444444" });
+    expect(deleted).toEqual([]);
+  });
+
+  it("ignore un user_id envoyé par l'appelant", async () => {
+    const { deps } = withAuth();
+    await handle(post(body({ user_id: "99999999-9999-4999-8999-999999999999" })), deps);
+    expect(dataCalls(deps)[0].args.p_payload.user_id).toBe("44444444-4444-4444-8444-444444444444");
+  });
+
+  it("refuse un numéro hors plage avant tout compte", async () => {
+    for (const n of [999, 1000.5, "4821", null, 1000000, undefined]) {
+      const { deps, created } = withAuth();
+      const r = await read(await handle(post({ ...body(), payload: { employee_number: n, role: "employee" } }), deps));
+      expect([r.status, r.body.error], String(n)).toEqual([422, "invalid_employee_number"]);
+      expect(created).toHaveLength(0);
+    }
+    const ok = withAuth();
+    expect((await handle(post({ ...body(), payload: { employee_number: 1000, role: "employee" } }), ok.deps)).status).toBe(200);
+    const ok2 = withAuth();
+    expect((await handle(post({ ...body(), payload: { employee_number: 999999, role: "employee" } }), ok2.deps)).status).toBe(200);
+  });
+
+  it("retire le compte créé quand l'action échoue, et répond avec l'erreur de la base", async () => {
+    const { deps, deleted } = withAuth({ deps: { responses: { apply_sync_action: { data: null, error: { code: "22023", message: "invalid_role" } } } } });
+    const r = await read(await handle(post(body({ role: "owner" })), deps));
+    expect([r.status, r.body.error]).toEqual([422, "invalid_role"]);
+    expect(deleted).toEqual(["44444444-4444-4444-8444-444444444444"]);
+  });
+
+  it("retire le compte inutile lors d'une relance, et renvoie le résultat enregistré", async () => {
+    const { deps, deleted } = withAuth({ deps: { responses: { apply_sync_action: { data: { employee_number: 4821, role: "employee", replayed: true }, error: null } } } });
+    const r = await read(await handle(post(body()), deps));
+    expect(r.status).toBe(200);
+    expect(r.body.result.replayed).toBe(true);
+    expect(deleted).toHaveLength(1);
+  });
+
+  it("relance quand l'adresse existe déjà : pas de compte, et une relance reconnue répond normalement", async () => {
+    const { deps, deleted } = withAuth({ create: { id: null, error: { code: "email_exists" } }, deps: { responses: { apply_sync_action: { data: { employee_number: 4821, replayed: true }, error: null } } } });
+    const r = await read(await handle(post(body()), deps));
+    expect(r.status).toBe(200);
+    expect(dataCalls(deps)[0].args.p_payload.user_id).toBeNull();
+    expect(deleted).toEqual([]);
+  });
+
+  it("répond 409 si le numéro existe déjà et que ce n'est pas une relance", async () => {
+    const { deps } = withAuth({ create: { id: null, error: { code: "email_exists" } }, deps: { responses: { apply_sync_action: { data: null, error: { code: "23502", message: "null value in column id" } } } } });
+    const r = await read(await handle(post(body()), deps));
+    expect([r.status, r.body.error]).toEqual([409, "employee_number_taken"]);
+    expect(JSON.stringify(r.body)).not.toMatch(/column/);
+  });
+
+  it("répond 500 générique si l'authentification refuse la création, sans appeler la base", async () => {
+    const { deps } = withAuth({ create: { id: null, error: { code: "unexpected_failure" } } });
+    const r = await read(await handle(post(body()), deps));
+    expect([r.status, r.body.error]).toEqual([500, "internal_error"]);
+    expect(dataCalls(deps)).toHaveLength(0);
+  });
+
+  it("une panne du retrait ne change pas la réponse d'erreur", async () => {
+    const { deps } = withAuth({ deleteFails: true, deps: { responses: { apply_sync_action: { data: null, error: { code: "23505", message: "employee_number_taken" } } } } });
+    const r = await read(await handle(post(body()), deps));
+    expect([r.status, r.body.error]).toEqual([409, "employee_number_taken"]);
+  });
+});
+
 describe("correspondance des erreurs", () => {
   it("garde un texte seulement s'il est un code court sûr", () => {
     expect(mapPgError({ code: "40001", message: "job_state_changed" })).toEqual([409, "job_state_changed"]);

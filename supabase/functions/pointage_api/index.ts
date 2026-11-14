@@ -25,6 +25,12 @@ serve(async (request) => {
       const { data, error } = await admin.rpc(name, args);
       return { data, error: error ? { code: error.code, message: error.message } : null };
     },
+    // Compte de connexion à adresse factice (clé de service seulement) ; `email_exists` est reconnu par le gestionnaire.
+    createAuthUser: async (email: string, password: string) => {
+      const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      return error ? { id: null, error: { code: error.code ?? "auth_error" } } : { id: data.user.id, error: null };
+    },
+    deleteAuthUser: async (id: string) => { await admin.auth.admin.deleteUser(id); },
     // Journal minimal : route et code de réponse. Jamais le secret, le corps ni les paramètres.
     log: ({ route, status }: { route: string; status: number }) => console.log(JSON.stringify({ route, status })),
   });

@@ -25,6 +25,9 @@ Types d'action : `approve_jobs`, `return_job`, `set_pause`, `register_account`, 
 
 Les pages sont `{ ok, data, has_more, next: { after_ts, after_id } | null }`. `after_ts` et `after_id` vont ensemble. Une page pleine annonce `has_more`.
 
+## register_account (compte de connexion)
+Charge : `{ employee_number (entier 1000–999999), role }` (`user_id` envoyé par l'appelant est ignoré). La fonction crée d'abord le compte d'authentification `<numéro>@pointage.invalid` (mot de passe aléatoire de 64 caractères hexadécimaux, jamais renvoyé ni conservé), puis appelle l'action avec son identifiant. Si l'action échoue, ou si c'est une relance reconnue, le compte qu'elle vient de créer est retiré. Si l'adresse existe déjà : relance reconnue = résultat enregistré ; sinon 409 `employee_number_taken`. Numéro hors plage : 422 `invalid_employee_number`. Un échec du retrait laisse un compte sans profil, sans effet ; à nettoyer au ménage.
+
 ## Erreurs
 Corps `{ ok: false, error: "<code court>" }`, jamais de texte SQL. 400 `invalid_json` · 401 `invalid_client` · 403 `forbidden` · 404 · 405 (avec `Allow`) · 409 (version périmée, clé déjà utilisée, numéro pris) · 413 `payload_too_large` · 422 (paramètre ou charge invalide) · 429 `rate_limited` · 500 `internal_error`.
 
