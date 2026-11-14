@@ -12,11 +12,16 @@ Jamais de valeur personnelle (nom, NAS, salaire, montant de paie) dans le dépô
 
 **Règle de sécurité des tables :** pour toute nouvelle table, `revoke all … from anon, public, authenticated` **avant** les `grant` voulus (Supabase donne des droits par défaut).
 
-## État (V0.1.1)
+## État (V0.2.0)
 
 Squelette copié de Sparklog V2.4.258 (étape 1bis de `PLAN.md`) : voir `COPIE-DEPUIS-SPARKLOG.md`. Écrans de gestion et de paie retirés ; `App.jsx`, `ManagerPages.jsx` et
 `manager-nav.js` réduits au temps (Aujourd'hui, En direct, Notes, Feuilles de temps, Inventaire, Journal, État du service, Feuille d'urgence).
 Les migrations de Sparklog (`supabase/migrations/`) sont encore **toutes** là (les tests de contrat les lisent) ; elles seront remplacées par des migrations neuves à l'étape 10.
+
+## Schéma neuf (V0.2.0)
+
+`supabase/next/` contient le schéma neuf (migrations `NNNN_*.sql` + `test-NNNN.sql`), **séparé** de `supabase/migrations/` (copie de Sparklog, encore lue par des tests). `scripts/test-next-schema.sh` (en root, PostgreSQL 16 local)
+applique `next/` sur une base jetable avec de faux schémas Supabase puis lance les tests SQL ; à lancer avant chaque PR qui touche `next/`. Décisions table par table et ordre des migrations : `docs/schema-cote1.md`. Fait : `0001_identity`.
 
 ## Ouvert (voir `PLAN.md`)
 
