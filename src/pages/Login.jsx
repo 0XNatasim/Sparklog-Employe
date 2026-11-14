@@ -1,0 +1,322 @@
+import React, { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
+import { isManagerRole } from "@/lib/roles";
+import { logActivity } from "@/lib/activity-log";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageToggle } from "@/components/language-toggle";
+import { useT } from "@/lib/use-t";
+import { withTimeout } from "@/lib/utils";
+import { authErrorKey } from "@/lib/mfa";
+
+// Turn a Supabase auth error into a message an employee can act on. Under load the
+// auth server times out talking to Postgres and returns a 5xx whose body serialises
+// to "{}" — showing that raw is useless and scary, so transient/opaque failures map
+// to a "server busy, retry" hint while real credential errors stay specific.
+function authErrorMessage(err, t) {
+  const status = err?.status ?? err?.statusCode ?? 0;
+  const raw = typeof err?.message === "string" ? err.message.trim() : "";
+  if (/invalid login credentials/i.test(raw)) return t("auth.invalidCredentials");
+  if (/email not confirmed/i.test(raw)) return t("auth.emailNotConfirmed");
+  const known = authErrorKey(err);
+  if (known) return t(known);
+  const opaque = raw === "" || raw === "{}" || raw.startsWith("{") || raw.startsWith("[");
+  const transient = status >= 500 || status === 429 || status === 408 ||
+    /timeout|timed out|context deadline|context canceled|failed to fetch|load failed|networkerror|fetch|refresh token/i.test(raw);
+  if (transient || opaque) return t("auth.serverBusy");
+  return raw || t("auth.failed");
+}
+
+export default function Login() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user, role } = useAuth();
+  const t = useT();
+
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState(
+    searchParams.get("passwordReset") === "success" ? t("auth.passwordResetSuccess") : ""
+  );
+
+  // A stale error must not stay on screen once the person edits a field to fix it.
+  const clearError = () => { if (errorMsg) setErrorMsg(""); };
+
+  const isSignup = mode === "signup";
+  const isForgotPassword = mode === "forgot";
+
+  React.useEffect(() => {
+    if (user) {
+      if (isManagerRole(role)) navigate("/manager", { replace: true });
+      else navigate("/", { replace: true });
+    }
+  }, [user, role, navigate]);
+
+  const passwordsMatch = !isSignup || password === confirmPassword;
+
+  const canSubmit = useMemo(() => {
+    if (!email.trim()) return false;
+    if (isForgotPassword) return true;
+    if (!password) return false;
+    if (isSignup && fullName.trim().length < 2) return false;
+    if (isSignup && password !== confirmPassword) return false;
+    return true;
+  }, [email, password, confirmPassword, fullName, isSignup, isForgotPassword]);
+
+  function normalizePhone(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    return s;
+  }
+
+  async function ensureProfile(userId, name, phoneRaw, emailValue) {
+    const phoneNorm = normalizePhone(phoneRaw);
+    // S-1: NEVER send `role` from the client. The `handle_new_user` DB trigger owns the
+    // row + its (lowercase) role; `role` is not in the `0018` whitelist, so including it
+    // makes the trigger reject the WHOLE upsert (dropping the phone/email/name sync too),
+    // e.g. for a returning signup. Sync only the whitelisted contact fields here.
+    const { error } = await withTimeout(supabase.from("profiles").upsert(
+      {
+        id: userId,
+        full_name: name || null,
+        phone: phoneNorm || null,
+        email: emailValue || null,
+      },
+      { onConflict: "id" }
+    ), 12000);
+    if (error) console.warn("[Login] ensureProfile error:", error);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErrorMsg("");
+    setSuccessMsg("");
+    if (!canSubmit) return;
+
+    setLoading(true);
+    try {
+      if (isForgotPassword) {
+        const { error } = await withTimeout(supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/reset-password`,
+        }), 12000);
+        if (error) throw error;
+        setSuccessMsg(t("auth.resetEmailSent"));
+      } else if (isSignup) {
+        const { data, error } = await withTimeout(supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/login`,
+            data: {
+              full_name: fullName.trim(),
+              phone: normalizePhone(phone),
+            },
+          },
+        }), 12000);
+        if (error) throw error;
+
+        const createdUser = data?.user;
+        if (createdUser?.id) {
+          await ensureProfile(
+            createdUser.id,
+            fullName.trim(),
+            phone,
+            createdUser.email || email.trim()
+          );
+        }
+
+        if (!data?.session) {
+          setErrorMsg(t("auth.signupCheckEmail"));
+          setMode("login");
+          setPassword("");
+          setLoading(false);
+          return;
+        }
+      } else {
+        const { error } = await withTimeout(supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }), 12000);
+        if (error) throw error;
+        logActivity("login");
+      }
+    } catch (err) {
+      setErrorMsg(authErrorMessage(err, t));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen grid place-items-center bg-background text-foreground p-4">
+      <div className="absolute right-4 top-4 flex items-center gap-1">
+        <ThemeToggle />
+        <LanguageToggle />
+      </div>
+      <Card className="w-full max-w-md dark:bg-background">
+        <div className="flex justify-center px-6 pt-6">
+          <img src="/header-light.webp" alt="Messier Connexion" className="w-64 max-w-full rounded dark:hidden" />
+          <img src="/header-dark.webp" alt="Messier Connexion" className="hidden w-64 max-w-full dark:block" />
+        </div>
+        <CardHeader>
+          <CardTitle className="text-2xl">{t("auth.title")}</CardTitle>
+          <CardDescription>
+            {isSignup ? t("auth.descSignup") : isForgotPassword ? t("auth.forgotDescription") : t("auth.descLogin")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="grid gap-3">
+            {isSignup && (
+              <>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="fullName">{t("auth.fullName")}</Label>
+                  <Input
+                    id="fullName"
+                    value={fullName}
+                    onChange={(e) => { setFullName(e.target.value); clearError(); }}
+                    placeholder={t("auth.fullNamePlaceholder")}
+                    autoComplete="name"
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="phone">{t("auth.phone")}</Label>
+                  <Input
+                    id="phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                    placeholder={t("auth.phonePlaceholder")}
+                    autoComplete="tel"
+                    inputMode="numeric"
+                    maxLength={15}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">{t("auth.email")}</Label>
+              <Input
+                id="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); clearError(); }}
+                placeholder={t("auth.emailPlaceholder")}
+                type="email"
+                autoComplete="email"
+              />
+            </div>
+
+            {!isForgotPassword && <div className="grid gap-1.5">
+              <Label htmlFor="password">{t("auth.password")}</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); clearError(); }}
+                  placeholder="••••••••"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={t("auth.togglePasswordVisibility")}
+                >
+                  {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                </button>
+              </div>
+              {isSignup && <span className="text-xs text-muted-foreground">{t("auth.passwordRequirement")}</span>}
+            </div>}
+
+            {isSignup && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="confirm">{t("auth.confirmPassword")}</Label>
+                <div className="relative">
+                  <Input
+                    id="confirm"
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); clearError(); }}
+                    placeholder="••••••••"
+                    type={showConfirm ? "text" : "password"}
+                    autoComplete="new-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowConfirm((v) => !v)}
+                    aria-label={t("auth.toggleConfirmVisibility")}
+                  >
+                    {showConfirm ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                </div>
+                {confirmPassword && !passwordsMatch && (
+                  <span className="text-xs text-destructive">{t("auth.passwordsDoNotMatch")}</span>
+                )}
+              </div>
+            )}
+
+            {errorMsg && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {errorMsg}
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success" role="status">
+                {successMsg}
+              </div>
+            )}
+
+            <Button disabled={!canSubmit || loading} type="submit" className="mt-1">
+              {loading ? t("common.pleaseWait") : isForgotPassword ? t("auth.sendResetLink") : isSignup ? t("auth.signupButton") : t("auth.loginButton")}
+            </Button>
+
+            {!isSignup && !isForgotPassword && (
+              <Button type="button" variant="link" className="-my-2" onClick={() => {
+                setErrorMsg("");
+                setSuccessMsg("");
+                setMode("forgot");
+              }}>
+                {t("auth.forgotPassword")}
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              variant="link"
+              onClick={() => {
+                setErrorMsg("");
+                setPassword("");
+                setConfirmPassword("");
+                setShowPassword(false);
+                setShowConfirm(false);
+                setSuccessMsg("");
+                setMode(isSignup || isForgotPassword ? "login" : "signup");
+              }}
+            >
+              {isSignup || isForgotPassword ? t("auth.backToLogin") : t("auth.noAccount")}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

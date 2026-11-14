@@ -1,0 +1,176 @@
+import { canAccessSection, isManagerRole, isOwnerRole } from "./roles";
+
+// Gestion pages and their access rules.
+//   grant — the GRANTABLE_ADMIN_SECTIONS id that also opens the page for an office admin;
+//           null means manager/owner only (payroll, reports, settings, audit are never grantable).
+//   ownerOnly — the page is reserved to the owner role (emergency timesheet).
+// `path` is relative to #/manager. Keep ids in step with authorization-matrix.js.
+//
+// MANAGER_PAGES are the pages of the former menu (V2, removed in V2.4.186). Some are menu entries
+// as they are (live, inventory, messages, journal, service status, emergency timesheet); the others
+// are now tabs of a page and lend it their rule (`from`). Their old paths redirect (OLD_PATHS).
+export const MANAGER_PAGES = Object.freeze([
+  { id: "live", path: "live", grant: "live", labelKey: "mgr.nav.live" },
+  { id: "timesheets", path: "timesheets", grant: "timesheet", labelKey: "mgr.nav.timesheets" },
+  { id: "receipts", path: "receipts", grant: "notifications", labelKey: "mgr.nav.receipts" },
+  { id: "unlock-day", path: "unlock-day", grant: "employees", labelKey: "mgr.nav.unlockDay" },
+  { id: "inventory", path: "inventory", grant: null, labelKey: "mgr.nav.inventory" },
+  { id: "advanced-audit", path: "advanced/audit", grant: null, labelKey: "mgr.nav.audit" },
+  { id: "advanced-health", path: "advanced/health", grant: null, labelKey: "mgr.nav.health" },
+  { id: "advanced-emergency", path: "advanced/emergency", grant: null, ownerOnly: true, labelKey: "mgr.nav.emergency" },
+].map((item) => Object.freeze(item)));
+
+// ── Menu entries ────────────────────────────────────────────────────────────
+// Related pages are grouped into pages with tabs (paths v3/… kept from Gestion V3, so links stay
+// valid). A tab keeps the access rule of the page it comes from: `from` = that page's id, or an
+// inline { grant, ownerOnly } rule. An entry with tabs opens when at least one of its tabs does.
+const tab = (key, from, labelKey) => Object.freeze({ key, from, labelKey });
+
+const MENU_ONLY_ITEMS = Object.freeze([
+  { id: "todo", path: "todo", grant: null, labelKey: "mgr.nav.todo", tabs: [
+    Object.freeze({ key: "todo", grant: null, labelKey: "mgr.nav3.tab.toApprove" }),
+    tab("receipts", "receipts", "mgr.nav.receipts"),
+  ] },
+  // My own notes and reminders (0111): private to each manager / owner.
+  // Notes › Contremaître (0134): the short reports of the foremen, read by the managers.
+  { id: "notes", path: "notes", grant: null, labelKey: "mgr.nav3.notes", tabs: [
+    Object.freeze({ key: "mine", grant: null, labelKey: "mgr.nav3.tab.myNotes" }),
+    Object.freeze({ key: "foreman", grant: null, labelKey: "mgr.nav3.tab.foreman" }),
+  ] },
+  { id: "v3-time", path: "v3/time", grant: null, labelKey: "mgr.nav.timesheets", tabs: [
+    tab("timesheets", "timesheets", "mgr.nav.timesheets"),
+    tab("unlock", "unlock-day", "mgr.nav3.tab.unlockDay"),
+    // Jours sans saisie: the count of Avancé › Journal › Employés, with the dates (same rule).
+    tab("missing", "advanced-audit", "mgr.nav3.tab.missingDays"),
+  ] },
+].map((item) => Object.freeze({ ...item, ...(item.tabs ? { tabs: Object.freeze(item.tabs) } : {}) })));
+
+// Every page and menu entry (rules for the route guard and authorization-matrix.js).
+export const MANAGER_NAV_ITEMS = Object.freeze([...MANAGER_PAGES, ...MENU_ONLY_ITEMS]);
+
+const byId = new Map(MANAGER_NAV_ITEMS.map((item) => [item.id, item]));
+const entry = (id) => byId.get(id);
+
+// The menu: the day's work first (« Aujourd'hui »), the weekly payroll next; the rest closed.
+// `open` = group expanded by default (a one-entry group always shows its entry).
+export const MANAGER_NAV = Object.freeze([
+  { id: "today", labelKey: "mgr.group.today", open: true, items: [entry("todo"), entry("live"), entry("notes")] },
+  { id: "time", labelKey: "mgr.group.time", open: false, items: [entry("v3-time")] },
+  { id: "team", labelKey: "mgr.group.team", open: false, items: [entry("inventory")] },
+  { id: "advanced", labelKey: "mgr.nav3.group.admin", open: false, items: [
+    entry("advanced-audit"), entry("advanced-health"), entry("advanced-emergency"),
+  ] },
+]);
+
+// Pages opened from a button of another page, not listed in the menu: title and access rule only
+// (Inventaire › Minimums par entrepôt, from the Inventaire page).
+export const MANAGER_SUBPAGES = Object.freeze([
+  Object.freeze({ id: "inventory-minimums", path: "inventory/minimums", grant: null, labelKey: "mgr.inventory.ratios.pageTitle", parent: "inventory" }),
+]);
+
+// The access rule a tab carries: its source page, or its inline rule.
+function tabRule(t) {
+  return t.from ? byId.get(t.from) : t;
+}
+
+// A page with this many tabs or more shows them nested under its entry in the sidebar instead of a
+// row of horizontal tabs (Rapports, Configuration, Historique paie); fewer keep the horizontal tabs.
+export const NESTED_TABS_MIN = 4;
+export const hasNestedTabs = (item) => (item?.tabs?.length || 0) >= NESTED_TABS_MIN;
+
+// Sidebar children of an entry for this user: its allowed tabs when it nests them, else none.
+export function nestedTabs(item, role, adminSections) {
+  return hasNestedTabs(item) ? visibleTabs(item, role, adminSections) : [];
+}
+
+// Route of a tab (the ?tab= the page itself reads).
+export const tabPath = (item, key) => `/manager/${item.path}?tab=${encodeURIComponent(key)}`;
+
+// Tabs of a menu entry this user may open, in order.
+export function visibleTabs(item, role, adminSections) {
+  return (item?.tabs || []).filter((t) => canOpenNavItem(role, adminSections, tabRule(t)));
+}
+
+// The tab to show for `requested` (?tab=): it when allowed, else the first allowed one, else null.
+export function resolveTab(item, role, adminSections, requested) {
+  const allowed = visibleTabs(item, role, adminSections);
+  const key = tabAlias(item, requested)?.tab ?? requested;
+  return (allowed.find((t) => t.key === key) || allowed[0] || null)?.key ?? null;
+}
+
+// A former tab key of this entry (old link or bookmark) → { tab, view? } it opens now; null otherwise.
+export function tabAlias(item, requested) {
+  return (requested && item?.aliases?.[requested]) || null;
+}
+
+// Same rule as canAccessSection: the menu and the route guard cannot disagree.
+export function canOpenNavItem(role, adminSections, item) {
+  if (item.tabs) return item.tabs.some((t) => canOpenNavItem(role, adminSections, tabRule(t)));
+  if (item.ownerOnly) return isOwnerRole(role);
+  return item.grant ? canAccessSection(role, adminSections, item.grant) : isManagerRole(role);
+}
+
+export function visibleManagerNav(role, adminSections) {
+  return MANAGER_NAV
+    .map((group) => ({ ...group, items: group.items.filter((item) => canOpenNavItem(role, adminSections, item)) }))
+    .filter((group) => group.items.length > 0);
+}
+
+const cleanPath = (path) => String(path || "").replace(/^\/+|\/+$/g, "");
+const withQuery = (path, params) => {
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+};
+
+// The menu entry at `path` (for the header title and the route guard).
+export function findNavItem(path) {
+  const clean = cleanPath(path);
+  return MANAGER_NAV.flatMap((group) => group.items).find((item) => item.path === clean)
+    || MANAGER_SUBPAGES.find((item) => item.path === clean) || null;
+}
+
+// First page the user may open — the landing page for #/manager (À traiter for managers).
+export function firstAllowedPath(role, adminSections) {
+  return visibleManagerNav(role, adminSections)[0]?.items[0]?.path || null;
+}
+
+// ── Old paths (the V2 menu, removed in V2.4.186) ────────────────────────────
+// Bookmarks and old links open the page and tab that hold them now. Paths the menu still uses
+// (live, inventory, messages, journal, service status, emergency timesheet) are not listed.
+export const OLD_PATHS = Object.freeze({
+  timesheets: { path: "v3/time", tab: "timesheets" },
+  "unlock-day": { path: "v3/time", tab: "unlock" },
+  receipts: { path: "todo", tab: "receipts" },
+});
+
+// Where an old path + query lands now, keeping the other parameters (employee, day, filter, job,
+// method…); null when `path` is not an old path.
+export function oldPathTarget(path, search = "") {
+  const clean = cleanPath(path);
+  const eq = OLD_PATHS[clean];
+  if (!eq) return null;
+  const params = new URLSearchParams(search);
+  let tabKey = eq.tab;
+  params.set("tab", tabKey);
+  return withQuery(eq.path, params);
+}
+
+// Old `/manager?section=…` links (bell notifications, bookmarks) → new route + query string.
+const LEGACY_SECTIONS = {
+  live: "live",
+  timesheet: "timesheets",
+  notifications: "receipts",
+  overtime: "receipts",
+  meals: "receipts",
+  parking: "receipts",
+};
+
+export function legacySectionTarget(search) {
+  const params = new URLSearchParams(search);
+  const section = params.get("section");
+  const path = section ? LEGACY_SECTIONS[section] : null;
+  if (!path) return null;
+  params.delete("section");
+  if (["overtime", "meals", "parking"].includes(section)) params.set("filter", section);
+  return oldPathTarget(path, params.toString()) || withQuery(path, params);
+}

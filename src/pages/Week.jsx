@@ -1,0 +1,310 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import "dayjs/locale/en";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
+import AppShell from "@/components/AppShell";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn, withTimeout } from "@/lib/utils";
+import { isManagerRole } from "@/lib/roles";
+import { useT } from "@/lib/use-t";
+import { Button } from "@/components/ui/button";
+import { calculateDailyTotals, dailyRegularMinutesFor } from "@/lib/payroll-calculations";
+import { loadDayRounding, roundingFor } from "@/lib/day-rounding";
+import { QUERY_BUDGETS } from "@/lib/query-budgets";
+import { companyDate } from "@/lib/company-time";
+import { ccqWeekNumber, weekStartSundayD } from "@/lib/ccq-week";
+import { useViewMode } from "@/contexts/ViewModeContext";
+import { useHolidayDates } from "@/lib/company-holidays";
+
+dayjs.extend(customParseFormat);
+dayjs.locale("en");
+
+function parseJobDate(job_date) {
+  if (!job_date) return null;
+  const formats = ["YYYY-MM-DD", "YYYY-MM-DDTHH:mm:ssZ", "YYYY-MM-DDTHH:mm:ss.SSSZ", "DD MMM YYYY"];
+  for (const f of formats) {
+    const d = dayjs(job_date, f, true);
+    if (d.isValid()) return d;
+  }
+  const d = dayjs(job_date);
+  return d.isValid() ? d : null;
+}
+
+function formatHoursHM(hoursFloat) {
+  const totalMinutes = Math.round((hoursFloat || 0) * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h}h${String(m).padStart(2, "0")}`;
+}
+
+function isNonEmptyOT(ot) {
+  return String(ot || "").trim().length > 0;
+}
+
+// The employee's jobs of the last weeks and the per-employee policies that split the totals
+// (overtime first hour, return with benefits, first trip unpaid, day-rounding counter).
+async function fetchWeeks(userId) {
+  const { data, error } = await withTimeout(
+    supabase
+      .from("jobs")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("job_date", dayjs(companyDate()).subtract(QUERY_BUDGETS.employeeWeekLookbackWeeks, "week").format("YYYY-MM-DD"))
+      .order("job_date", { ascending: false })
+      .order("updated_at", { ascending: false }),
+    12000
+  );
+  if (error) throw error;
+  const { data: profile } = await supabase
+    .from("profiles").select("role, overtime_first_hour_double, return_with_benefits_to_8h, first_trip_unpaid, ten_hour_days").eq("id", userId).maybeSingle();
+  const counters = await loadDayRounding({ userIds: [userId], profiles: [{ id: userId, first_trip_unpaid: Boolean(profile?.first_trip_unpaid) }] });
+  return { jobs: data || [], profile, rounding: roundingFor(counters, userId) };
+}
+
+export default function Week() {
+  const { user, role } = useAuth();
+  const [searchParams] = useSearchParams();
+  const t = useT();
+  const { isViewMode, viewedEmployee } = useViewMode();
+
+  const employeeIdParam = searchParams.get("employee");
+  const isManagerViewingEmployee = isManagerRole(role) && Boolean(employeeIdParam);
+  const effectiveUserId = isViewMode ? viewedEmployee.id : (isManagerViewingEmployee ? employeeIdParam : user?.id);
+
+  const [jobs, setJobs] = useState([]);
+  const [otFirstHourDouble, setOtFirstHourDouble] = useState(false);
+  const [returnWithBenefitsTo8h, setReturnWithBenefitsTo8h] = useState(false);
+  const holidayDates = useHolidayDates();
+  const [firstTripUnpaid, setFirstTripUnpaid] = useState(false);
+  const [dailyRegularMinutes, setDailyRegularMinutes] = useState(480); // 600 with « 4 jours de 10 h »
+  const [rounding, setRounding] = useState(null); // day-rounding counter (15 min)
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+
+  const [openWeekKey, setOpenWeekKey] = useState(null);
+
+  function applyWeeks({ jobs: rows, profile: prof, rounding: nextRounding }) {
+    setJobs(rows);
+    setOtFirstHourDouble(Boolean(prof?.overtime_first_hour_double));
+    setReturnWithBenefitsTo8h(Boolean(prof?.return_with_benefits_to_8h));
+    setFirstTripUnpaid(Boolean(prof?.first_trip_unpaid));
+    setDailyRegularMinutes(dailyRegularMinutesFor(prof));
+    setRounding(nextRounding);
+  }
+  function failWeeks(e) {
+    setErr(e?.message || t("week.errors.failedLoad"));
+    setJobs([]);
+  }
+
+  async function load() {
+    setErr("");
+    setLoading(true);
+    try {
+      if (!effectiveUserId) setJobs([]);
+      else applyWeeks(await fetchWeeks(effectiveUserId));
+    } catch (e) {
+      failWeeks(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Another employee: clear the message and show the weeks as loading (adjusted while rendering).
+  const [weeksUser, setWeeksUser] = useState(effectiveUserId);
+  if (weeksUser !== effectiveUserId) {
+    setWeeksUser(effectiveUserId);
+    setErr("");
+    setLoading(true);
+  }
+  useEffect(() => {
+    let alive = true;
+    const read = effectiveUserId ? fetchWeeks(effectiveUserId) : Promise.resolve(null);
+    read.then(
+      (weeks) => { if (alive) { if (weeks) applyWeeks(weeks); else setJobs([]); } },
+      (e) => { if (alive) failWeeks(e); },
+    ).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveUserId]);
+
+  const { weekly, dailyByKey } = useMemo(() => {
+    const calculatedDays = calculateDailyTotals(jobs, { firstOtHourDouble: otFirstHourDouble, returnWithBenefitsTo8h, firstTripUnpaid, dailyRegularMinutes, holidayDates, rounding });
+    const dailyMap = new Map([...calculatedDays].map(([dayKey, totals]) => [dayKey, {
+      ...totals,
+      date: parseJobDate(dayKey),
+      hours: totals.totalPaidMinutes / 60,
+      regularHours: (totals.regularWorkMinutes + totals.returnRegularMinutes) / 60,
+      ot15: totals.overtime50Minutes / 60,
+      ot20: totals.overtime100Minutes / 60,
+      returnNb: totals.returnNoBenefitMinutes / 60,
+      km: totals.totalKm,
+      otCount: jobs.filter((job) => job.job_date === dayKey && isNonEmptyOT(job.ot)).length,
+    }]));
+
+    const weeklyMap = new Map();
+    for (const day of dailyMap.values()) {
+      const weekStart = weekStartSundayD(day.date); // CCQ pay week: Sunday → Saturday
+      const weekKey = weekStart.format("YYYY-MM-DD");
+      if (!weeklyMap.has(weekKey)) {
+        weeklyMap.set(weekKey, {
+          start: weekStart,
+          end: weekStart.add(6, "day"),
+          regularHours: 0,
+          ot15: 0,
+          ot20: 0,
+          returnNb: 0,
+          totalKm: 0,
+          dayKeys: [],
+        });
+      }
+      const w = weeklyMap.get(weekKey);
+      w.regularHours += day.regularHours;
+      w.ot15 += day.ot15;
+      w.ot20 += day.ot20;
+      w.returnNb += day.returnNb;
+      w.totalKm += day.km;
+      w.dayKeys.push(day.date.format("YYYY-MM-DD"));
+    }
+
+    const weeklyArr = Array.from(weeklyMap.values()).map((w) => {
+      const uniqueDayKeys = Array.from(new Set(w.dayKeys)).sort((a, b) =>
+        dayjs(a).isAfter(dayjs(b)) ? -1 : 1
+      );
+      return {
+        ...w,
+        totalHours: w.regularHours + w.ot15 + w.ot20 + w.returnNb,
+        dayKeys: uniqueDayKeys,
+      };
+    });
+
+    weeklyArr.sort((a, b) => (a.start.isAfter(b.start) ? -1 : 1));
+    return { weekly: weeklyArr, dailyByKey: dailyMap };
+  }, [jobs, otFirstHourDouble, returnWithBenefitsTo8h, firstTripUnpaid, dailyRegularMinutes, holidayDates, rounding]);
+
+  function toggleWeek(weekKey) {
+    setOpenWeekKey((prev) => (prev === weekKey ? null : weekKey));
+  }
+
+  return (
+    <AppShell>
+      <div className="space-y-3">
+        {loading && <Card><CardContent className="p-4 text-sm">{t("common.loading")}</CardContent></Card>}
+        {err && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between gap-3">
+            <span>{err}</span>
+            <Button size="sm" variant="outline" className="shrink-0 text-xs" onClick={load}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        )}
+        {!loading && !err && weekly.length === 0 && (
+          <Card><CardContent className="p-4 text-sm text-muted-foreground">{t("week.empty")}</CardContent></Card>
+        )}
+
+        {!loading && !err && weekly.map((w) => {
+          const weekKey = w.start.format("YYYY-MM-DD");
+          const isOpen = openWeekKey === weekKey;
+
+          return (
+            <div key={weekKey} className="space-y-2">
+              <Card
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleWeek(weekKey)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") toggleWeek(weekKey);
+                }}
+                className={cn(
+                  "cursor-pointer transition-colors",
+                  isOpen ? "border-primary/40" : ""
+                )}
+                title={t("week.openTitle")}
+              >
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-4">
+                    <div className="grid gap-1.5">
+                      <div className="flex items-center gap-2 text-xl font-extrabold">
+                        {t("week.weekNum", { num: ccqWeekNumber(w.start) })}
+                        {isOpen ? <ChevronDown className="h-5 w-5 text-muted-foreground" /> : <ChevronRight className="h-5 w-5 text-muted-foreground" />}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {w.start.format("DD MMM")} → {w.end.format("DD MMM YYYY")}
+                      </div>
+                      <div className="text-sm">
+                        {t("week.total")}: <b>{formatHoursHM(w.totalHours)}</b>
+                        <span className="mx-2 text-muted-foreground">•</span>
+                        <b>{Math.round(w.totalKm)}</b> km
+                      </div>
+                    </div>
+
+                    <div className="grid gap-1.5 min-w-[140px]">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-bold text-muted-foreground">{t("week.regular")}:</span>
+                        <span className="font-bold text-lg">{formatHoursHM(w.regularHours)}</span>
+                      </div>
+                      {w.ot15 > 0 && (
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="font-bold text-muted-foreground">{t("week.ot15")}:</span>
+                          <span className="font-bold text-lg">{formatHoursHM(w.ot15)}</span>
+                        </div>
+                      )}
+                      {w.ot20 > 0 && (
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="font-bold text-muted-foreground">{t("week.ot20")}:</span>
+                          <span className="font-bold text-lg">{formatHoursHM(w.ot20)}</span>
+                        </div>
+                      )}
+                      {w.returnNb > 0 && (
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="font-bold text-muted-foreground">{t("week.returnNoBenefit")}:</span>
+                          <span className="font-bold text-lg">{formatHoursHM(w.returnNb)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {isOpen && (
+                <Card>
+                  <CardContent className="p-3 grid gap-2">
+                    {w.dayKeys.length === 0 && (
+                      <div className="text-sm text-muted-foreground p-2">{t("week.noDays")}</div>
+                    )}
+                    {w.dayKeys.map((dayKey) => {
+                      const day = dailyByKey.get(dayKey);
+                      if (!day) return null;
+                      return (
+                        <div
+                          key={dayKey}
+                          className="flex items-center justify-between gap-3 rounded-md border p-3"
+                        >
+                          <div className="text-sm font-bold">{day.date.format("DD MMM YYYY")}</div>
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            <span className="rounded-full border bg-muted px-2.5 py-0.5 text-xs">
+                              <b>{formatHoursHM(day.hours)}</b>
+                            </span>
+                            <span className="rounded-full border bg-muted px-2.5 py-0.5 text-xs">
+                              <b>{Math.round(day.km)}</b> km
+                            </span>
+                            <span className="rounded-full border bg-muted px-2.5 py-0.5 text-xs">
+                              {t("week.otCountLabel")}<b>{day.otCount}</b>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </AppShell>
+  );
+}

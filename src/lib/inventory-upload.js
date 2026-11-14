@@ -1,0 +1,133 @@
+import { prepareEvidenceImage, evidenceUploadFailure } from "./evidence-file";
+import { refreshSessionOnce, withTimeout } from "./utils";
+import { INVENTORY_BUCKET, inventoryStoragePath } from "./inventory-screenshots";
+import { effectiveOcrStatus, isDefectiveRow, mergeInventoryItems, summarizeInventoryDay } from "./inventory-items";
+import { probableMissingLines } from "./inventory-screenshots";
+
+export async function fetchInventorySlots(client, userId, jobDate) {
+  const { data, error } = await withTimeout(
+    client.from("inventory_screenshots").select("slot, storage_path").eq("user_id", userId).eq("job_date", jobDate),
+    10000
+  );
+  if (error) throw error;
+  return data || [];
+}
+
+async function uploadWithRefresh(client, path, image) {
+  const attempt = () => withTimeout(
+    client.storage.from(INVENTORY_BUCKET).upload(path, image, { contentType: "image/jpeg", upsert: false }),
+    20000
+  );
+  try {
+    const { error } = await attempt();
+    if (error) throw error;
+  } catch (firstError) {
+    if (!["auth", "timeout", "network"].includes(evidenceUploadFailure(firstError).key)) throw firstError;
+    await refreshSessionOnce();
+    const { error } = await attempt();
+    const duplicate = Number(error?.statusCode ?? error?.status) === 409 || /already exists|duplicate/i.test(error?.message || "");
+    if (error && !duplicate) throw error;
+  }
+}
+
+// Validates and re-encodes the picture, uploads it, then records the slot. A retake replaces
+// the slot's row; the previous object is removed best-effort (the cleanup worker reconciles
+// anything left behind). A row failure removes the just-uploaded object.
+export async function saveInventoryScreenshot(client, { userId, jobDate, slot, file, retentionDays = 30, previousPath = null }) {
+  const image = await prepareEvidenceImage(file);
+  const path = inventoryStoragePath(userId, jobDate, slot, crypto.randomUUID());
+  await uploadWithRefresh(client, path, image);
+  const expiresAt = new Date(Date.now() + Math.min(365, Math.max(1, retentionDays)) * 86400000).toISOString();
+  const { error } = await withTimeout(
+    client.from("inventory_screenshots")
+      .upsert({ user_id: userId, job_date: jobDate, slot, storage_path: path, expires_at: expiresAt, ocr_status: "pending", list_total: null, defective_total: null }, { onConflict: "user_id,job_date,slot" }),
+    12000
+  );
+  if (error) {
+    await client.storage.from(INVENTORY_BUCKET).remove([path]).catch(() => undefined);
+    throw error;
+  }
+  if (previousPath && previousPath !== path) {
+    await client.storage.from(INVENTORY_BUCKET).remove([previousPath]).catch(() => undefined);
+  }
+  requestInventoryReading(client, { jobDate, slot });
+  return path;
+}
+
+// Asks the server to read a screenshot (OCR) into a written equipment list. Best-effort: the
+// photo is already saved, and a manager can re-run the reading from the Inventory page.
+export function requestInventoryReading(client, { jobDate, slot, userId = null }) {
+  return withTimeout(
+    client.functions.invoke("process_inventory_screenshot", { body: { job_date: jobDate, slot, user_id: userId } }),
+    15000
+  ).then(({ error }) => {
+    if (error) console.warn("[inventory] reading request failed", error);
+  }).catch((error) => console.warn("[inventory] reading request failed", error));
+}
+
+// The employee's own reading of the day's list: how many lines (equipment) were read from the
+// screenshots against the app's own "N de N" total. { state, count, expected } as on the manager
+// page, plus the defective products read under « Produits défectueux » ({ state, count, expected }).
+// Since 0117 also `unreadable` (lines read without their quantity: { code, name }), `missing` (lines
+// of the total never read) and, when some are missing, `probable` (their likely names, from the
+// employee's previous complete list).
+export async function fetchInventoryReading(client, userId, jobDate) {
+  const [shotsResult, itemsResult] = await Promise.all([
+    withTimeout(client.from("inventory_screenshots").select("slot, ocr_status, list_total, defective_total, created_at")
+      .eq("user_id", userId).eq("job_date", jobDate), 10000),
+    withTimeout(client.from("inventory_items").select("slot, section, code, name, quantity")
+      .eq("user_id", userId).eq("job_date", jobDate).limit(1000), 10000),
+  ]);
+  if (shotsResult.error) throw shotsResult.error;
+  if (itemsResult.error) throw itemsResult.error;
+  const now = Date.now();
+  const shots = (shotsResult.data || []).map((shot) => ({ ...shot, ocr_status: effectiveOcrStatus(shot, now) }));
+  const { state, count, expected, defective, unreadable, missing, items } = summarizeInventoryDay(shots, itemsResult.data || []);
+  let probable = [];
+  if (state !== "reading" && missing > 0) {
+    try {
+      const previous = await fetchPreviousInventory(client, { userId, beforeDate: jobDate });
+      if (previous && summarizeInventoryDay(previous.shots, previous.items).state === "ok") {
+        const previousItems = mergeInventoryItems(previous.items.filter((row) => !isDefectiveRow(row)));
+        probable = probableMissingLines(items, previousItems).map(({ code, name }) => ({ code, name }));
+      }
+    } catch { /* indicative only */ }
+  }
+  return {
+    state, count, expected, missing, probable,
+    unreadable: unreadable.map(({ code, name }) => ({ code, name })),
+    defective: { state: defective.state, count: defective.count, expected: defective.expected },
+  };
+}
+
+// Manager action: removes the files, the written list and the rows of one screenshot (slot) or
+// of the whole day for an employee. Done server-side so Storage and the database stay in step.
+export async function deleteInventoryScreenshots(client, { userId, jobDate, slot = null }) {
+  const { data, error } = await withTimeout(
+    client.functions.invoke("delete_inventory_screenshots", { body: { user_id: userId, job_date: jobDate, slot } }),
+    20000
+  );
+  if (error) throw error;
+  if (data && data.ok === false) throw new Error(data.error || "inventory_delete_failed");
+  return data;
+}
+
+// The employee's most recent earlier day that has a written inventory list, with its screenshots'
+// reading status (needed to know whether that list is complete). null when there is none.
+export async function fetchPreviousInventory(client, { userId, beforeDate }) {
+  const { data: latest, error: latestError } = await withTimeout(
+    client.from("inventory_items").select("job_date").eq("user_id", userId).eq("section", "inventory").lt("job_date", beforeDate)
+      .order("job_date", { ascending: false }).limit(1),
+    12000
+  );
+  if (latestError) throw latestError;
+  const date = latest?.[0]?.job_date;
+  if (!date) return null;
+  const [itemsResult, shotsResult] = await Promise.all([
+    withTimeout(client.from("inventory_items").select("slot, section, code, name, quantity").eq("user_id", userId).eq("job_date", date).limit(1000), 12000),
+    withTimeout(client.from("inventory_screenshots").select("slot, ocr_status, list_total, defective_total, created_at").eq("user_id", userId).eq("job_date", date), 12000),
+  ]);
+  if (itemsResult.error) throw itemsResult.error;
+  if (shotsResult.error) throw shotsResult.error;
+  return { date, items: itemsResult.data || [], shots: shotsResult.data || [] };
+}

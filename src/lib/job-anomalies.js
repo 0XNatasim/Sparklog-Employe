@@ -1,0 +1,156 @@
+import { TEN_HOUR_DAY_MINUTES, DAILY_REGULAR_MINUTES, dayFirstTripUnpaidMinutes, getKilometreBreakdown, minutesBetween } from "./payroll-calculations";
+
+// « 4 jours de 10 h »: overtime, hence its proof, starts 2 h later.
+const TEN_HOUR_EXTRA_MINUTES = TEN_HOUR_DAY_MINUTES - DAILY_REGULAR_MINUTES;
+
+// Default thresholds for the manager's "À vérifier" box. These only flag a job for a
+// second look before approval; the database contract still decides what is accepted.
+// Managers can change the long-day and kilometre limits in Réglage.
+export const ANOMALY_LIMITS = Object.freeze({
+  longDayMinutes: 12 * 60,
+  highKm: 300,
+  overtimeMinutes: 8 * 60,
+});
+
+const REVIEWABLE = new Set(["submitted", "approved"]);
+
+function naiveMinutes(job, time) {
+  return Date.parse(`${String(job.job_date).slice(0, 10)}T${String(time).slice(0, 5)}:00Z`) / 60000;
+}
+
+// Resolved instants when both jobs have them; otherwise the civil times of the work
+// date, wrapping past midnight like the payroll engine.
+function interval(job, useInstants) {
+  if (useInstants) return [Date.parse(job.started_at) / 60000, Date.parse(job.ended_at) / 60000];
+  const start = naiveMinutes(job, job.depart);
+  return [start, start + minutesBetween(job.depart, job.fin)];
+}
+
+function hasInstants(job) {
+  return Boolean(job.started_at && job.ended_at);
+}
+
+function sameEntry(a, b) {
+  const code = (job) => String(job.ot || "").trim().toLowerCase();
+  const time = (value) => String(value || "").slice(0, 5);
+  return code(a) === code(b) && time(a.depart) === time(b.depart) && time(a.fin) === time(b.fin);
+}
+
+// Submitted jobs first, so the line opens the job the manager can still act on.
+function orderedIds(...jobs) {
+  return jobs
+    .slice()
+    .sort((a, b) => (a.status === "submitted" ? 0 : 1) - (b.status === "submitted" ? 0 : 1))
+    .map((job) => job.id);
+}
+
+// Limits from company_time_settings, falling back to the defaults for missing or
+// out-of-range values (e.g. before the columns exist).
+export function anomalyLimitsFromSettings(settings) {
+  const minutes = Number(settings?.anomaly_long_day_minutes);
+  const km = Number(settings?.anomaly_high_km);
+  return {
+    ...ANOMALY_LIMITS,
+    longDayMinutes: minutes >= 60 && minutes <= 1440 ? minutes : ANOMALY_LIMITS.longDayMinutes,
+    highKm: km >= 1 && km <= 5000 ? km : ANOMALY_LIMITS.highKm,
+  };
+}
+
+// Pure detection over submitted/approved jobs. Only anomalies that touch at least one
+// submitted job are returned: approved days are already settled.
+// `firstTripUnpaidUsers` (Set of user ids with the "first trip unpaid" option) makes the
+// overtime-proof threshold count paid time, like the employee screens and the database. `tenHourUsers` (« 4 jours de
+// 10 h ») have a threshold 2 h higher: overtime starts after 10 h of work.
+export function detectJobAnomalies(jobs, limits = ANOMALY_LIMITS, { firstTripUnpaidUsers = new Set(), tenHourUsers = new Set() } = {}) {
+  const days = new Map();
+  for (const job of jobs || []) {
+    if (!REVIEWABLE.has(job.status) || !job.user_id || !job.job_date || !job.depart || !job.fin) continue;
+    const key = `${job.user_id}|${job.job_date}`;
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(job);
+  }
+
+  const anomalies = [];
+  const add = (type, dayJobs, extra = {}) => {
+    if (!dayJobs.some((job) => job.status === "submitted")) return;
+    const [first] = dayJobs;
+    const jobIds = orderedIds(...dayJobs);
+    anomalies.push({ key: `${type}:${jobIds.join(",")}`, type, userId: first.user_id, jobDate: first.job_date, jobIds, ...extra });
+  };
+
+  for (const dayJobs of days.values()) {
+    dayJobs.sort((a, b) => String(a.depart).localeCompare(String(b.depart)));
+
+    for (let i = 0; i < dayJobs.length; i += 1) {
+      for (let j = i + 1; j < dayJobs.length; j += 1) {
+        const a = dayJobs[i];
+        const b = dayJobs[j];
+        if (sameEntry(a, b)) {
+          add("duplicate", [a, b], { ot: a.ot || "", depart: a.depart, fin: a.fin });
+          continue;
+        }
+        const useInstants = hasInstants(a) && hasInstants(b);
+        const [aStart, aEnd] = interval(a, useInstants);
+        const [bStart, bEnd] = interval(b, useInstants);
+        const overlap = Math.min(aEnd, bEnd) - Math.max(aStart, bStart);
+        if (overlap > 0) add("overlap", [a, b], { minutes: Math.round(overlap) });
+      }
+    }
+
+    const worked = dayJobs.reduce((sum, job) => sum + minutesBetween(job.depart, job.fin), 0);
+    if (worked > limits.longDayMinutes) add("long_day", dayJobs, { minutes: worked });
+    const paidWorked = worked - (firstTripUnpaidUsers.has(dayJobs[0].user_id) ? dayFirstTripUnpaidMinutes(dayJobs) : 0);
+    if (paidWorked > limits.overtimeMinutes + (tenHourUsers.has(dayJobs[0].user_id) ? TEN_HOUR_EXTRA_MINUTES : 0) && !dayJobs.some((job) => job.overtime_evidence_captured)) {
+      add("overtime_no_evidence", dayJobs, { minutes: paidWorked });
+    }
+
+    for (const job of dayJobs) {
+      const { totalKm } = getKilometreBreakdown(job);
+      if (totalKm > limits.highKm) add("high_km", [job], { km: totalKm });
+    }
+  }
+
+  return sortAnomalies(anomalies);
+}
+
+export function sortAnomalies(anomalies) {
+  return anomalies.sort((a, b) => b.jobDate.localeCompare(a.jobDate) || String(a.userId).localeCompare(String(b.userId)));
+}
+
+// « OT déjà utilisé » (migration 0108): `rows` come from the ot_reuse_for_jobs RPC — for each submitted
+// job, the other jobs carrying the same OT number (any employee, date or status). One anomaly per
+// submitted job. The exact same entry (same employee, day and times) is left to « duplicate » above.
+export function otReuseAnomalies(rows, jobs) {
+  const byId = new Map((jobs || []).map((job) => [job.id, job]));
+  const byJob = new Map();
+  for (const row of rows || []) {
+    const job = byId.get(row.job_id);
+    if (!job || job.status !== "submitted") continue;
+    const other = { id: row.other_job_id, user_id: row.other_user_id, job_date: row.other_date, ot: job.ot, depart: row.other_depart, fin: row.other_fin };
+    if (other.user_id === job.user_id && String(other.job_date) === String(job.job_date) && sameEntry(job, other)) continue;
+    if (!byJob.has(job.id)) byJob.set(job.id, { job, others: [] });
+    byJob.get(job.id).others.push({ jobId: row.other_job_id, userId: row.other_user_id, name: row.other_name || "", date: String(row.other_date).slice(0, 10), status: row.other_status });
+  }
+  return [...byJob.values()].map(({ job, others }) => ({
+    key: `ot_reused:${job.id}`,
+    type: "ot_reused",
+    userId: job.user_id,
+    jobDate: job.job_date,
+    jobIds: [job.id],
+    ot: String(job.ot || "").trim(),
+    others,
+  }));
+}
+
+// « Patrick D. · 19 oct. (soumis) ; … » for the anomaly line; at most `max` other jobs, then « +N ».
+export function otReuseOthersText(others, { t, formatDate, max = 3 }) {
+  const list = (others || []).slice(0, max).map((o) => `${o.name || "?"} · ${formatDate(o.date)} (${t(`status.${o.status}`)})`);
+  if ((others || []).length > max) list.push(`+${others.length - max}`);
+  return list.join(" ; ");
+}
+
+// Anomalies that touch any of the given job ids (a batch about to be approved).
+export function anomaliesForJobs(anomalies, jobIds) {
+  const ids = new Set(jobIds);
+  return anomalies.filter((anomaly) => anomaly.jobIds.some((id) => ids.has(id)));
+}

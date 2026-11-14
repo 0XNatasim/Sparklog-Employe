@@ -1,0 +1,599 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { CircleCheck, CircleX, Images } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import dayjs from "dayjs";
+import "dayjs/locale/en";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
+import { useViewMode } from "@/contexts/ViewModeContext";
+import { hoursBetween, formatHours } from "../lib/time";
+import AppShell from "@/components/AppShell";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { statusBadgeVariant } from "@/lib/status";
+import { isAdminEmployee } from "@/lib/roles";
+import { useT } from "@/lib/use-t";
+import { dailyRegularMinutesFor, getKilometreBreakdown } from "@/lib/payroll-calculations";
+import { withTimeout } from "@/lib/utils";
+import JobCaptureIcons from "@/components/JobCaptureIcons";
+import { lastOvertimeJobIds } from "@/lib/timesheet-layout";
+import { dailyOvertimeEvidenceRequirement } from "@/lib/job-submission";
+import { submitSavedJob } from "@/lib/submit-job";
+import { isPendingManagerEntry } from "@/lib/manager-entry";
+import { inventoryCaptured, inventoryDayBadge, inventoryRequiredFor } from "@/lib/inventory-screenshots";
+import InventoryPhotosDialog from "@/components/InventoryPhotosDialog";
+import { fetchInventorySlots } from "@/lib/inventory-upload";
+import { QUERY_BUDGETS } from "@/lib/query-budgets";
+import { friendlyErrorMessage, isOfflineError } from "@/lib/error-messages";
+import { jobOverlapDetails, jobOverlapMessage } from "@/lib/job-overlap";
+import { parkingReceiptPaths } from "@/lib/parking-receipts";
+import { useConfirmDialog } from "@/components/ConfirmDialog";
+import ForemanNoteIcon from "@/components/ForemanNoteIcon";
+import { isForemanOt } from "@/lib/foreman-reports";
+
+dayjs.locale("en");
+
+function fmtTimeHHmm(t) {
+  if (!t) return "—";
+  return String(t).slice(0, 5);
+}
+
+function makeDayjsFromJob(job_date, timeStr) {
+  if (!job_date || !timeStr) return null;
+  const d = dayjs(`${job_date}T${timeStr}`);
+  return d.isValid() ? d : null;
+}
+
+function toHHmmLabelFromFormatHours(formatHoursResult) {
+  const num = Number(String(formatHoursResult).replace(",", "."));
+  if (!Number.isFinite(num) || num <= 0) return "0h00";
+  const totalMinutes = Math.round(num * 60);
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return `${hh}h${String(mm).padStart(2, "0")}`;
+}
+
+function kmTotal(job) {
+  return getKilometreBreakdown(job || {}).totalKm;
+}
+
+export default function History() {
+  const { user, role } = useAuth();
+  const { isViewMode, viewedEmployee } = useViewMode();
+  const effectiveUserId = isViewMode ? (viewedEmployee?.id || user?.id) : user?.id;
+  const navigate = useNavigate();
+  const t = useT();
+
+  const [jobs, setJobs] = useState([]);
+  const [mealJobIds, setMealJobIds] = useState(new Set());
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
+  const [actionLoadingKey, setActionLoadingKey] = useState(null);
+  // End-of-shift inventory: per-day capture counts (null until loaded, so a failed read never
+  // shows a false "missing"), whether the employee has the option, and the open photo viewer.
+  const [inventoryEnabled, setInventoryEnabled] = useState(false);
+  // Paid-time threshold for the overtime screenshot (stricter gross rule until loaded).
+  const [firstTripUnpaid, setFirstTripUnpaid] = useState(false);
+  const [dailyRegularMinutes, setDailyRegularMinutes] = useState(480); // 600 with « 4 jours de 10 h »
+  const [inventoryCounts, setInventoryCounts] = useState(null);
+  const [inventoryViewDate, setInventoryViewDate] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [confirm, confirmDialog] = useConfirmDialog();
+  const overtimeMarkerIds = useMemo(() => lastOvertimeJobIds(jobs), [jobs]);
+  // The foreman's own notes (0136) on the CONTREMAÎTRE sheets shown: a blue icon that opens the text, kept for reference.
+  const [foremanNotes, setForemanNotes] = useState(() => new Map());
+  useEffect(() => {
+    const ids = jobs.filter((j) => isForemanOt(j.ot)).map((j) => j.id);
+    if (!ids.length) return undefined;
+    let alive = true;
+    supabase.from("foreman_reports").select("job_id, audited_name, body, created_at, returned_at, returned_by_name, return_reason").in("job_id", ids)
+      .then(({ data }) => { if (alive && data) setForemanNotes(new Map(data.map((row) => [row.job_id, row]))); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [jobs]);
+
+  function showError(error, fallbackKey, candidate = null) {
+    const overlapMessage = candidate ? jobOverlapMessage(error, candidate, jobs, t) : null;
+    setErr(isOfflineError(error) ? "" : overlapMessage || friendlyErrorMessage(error, t, fallbackKey));
+  }
+
+  function historyQuery(cursor = null) {
+    let query = supabase.from("jobs").select("*")
+      .eq("user_id", effectiveUserId)
+      .order("job_date", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(QUERY_BUDGETS.employeeHistoryPage);
+    if (cursor) query = query.or(`job_date.lt.${cursor.job_date},and(job_date.eq.${cursor.job_date},id.lt.${cursor.id})`);
+    return query;
+  }
+
+  async function mealIdsFor(page) {
+    const ids = page.map((job) => job.id);
+    if (!ids.length) return [];
+    const { data, error } = await withTimeout(supabase.from("meal_claims").select("job_id").in("job_id", ids), 12000);
+    if (error) throw error;
+    return (data || []).map((claim) => claim.job_id);
+  }
+
+  // First page of jobs (newest first) and which of them carry a supper claim.
+  async function readFirstPage() {
+    const jobsResult = await withTimeout(historyQuery(), 12000);
+    if (jobsResult.error) throw jobsResult.error;
+    const page = jobsResult.data || [];
+    return { page, mealIds: await mealIdsFor(page) };
+  }
+
+  function applyFirstPage({ page, mealIds }) {
+    setJobs(page);
+    setMealJobIds(new Set(mealIds));
+    setHasMore(page.length === QUERY_BUDGETS.employeeHistoryPage);
+  }
+
+  async function load() {
+    setErr("");
+    setInfo("");
+    setLoading(true);
+    try {
+      applyFirstPage(await readFirstPage());
+    } catch (e) {
+      showError(e, "history.errors.failedLoad");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMore() {
+    const cursor = jobs[jobs.length - 1];
+    if (!cursor) return;
+    setLoadingMore(true);
+    setErr("");
+    try {
+      const result = await withTimeout(historyQuery(cursor), 12000);
+      if (result.error) throw result.error;
+      const page = result.data || [];
+      const mealIds = await mealIdsFor(page);
+      setJobs((current) => [...current, ...page]);
+      setMealJobIds((current) => new Set([...current, ...mealIds]));
+      setHasMore(page.length === QUERY_BUDGETS.employeeHistoryPage);
+    } catch (error) {
+      showError(error, "history.errors.failedLoad");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // Another employee (view mode): clear the messages and show the list as loading (adjusted while
+  // rendering); the effect below reads its first page.
+  const [historyUser, setHistoryUser] = useState(effectiveUserId);
+  if (historyUser !== effectiveUserId) {
+    setHistoryUser(effectiveUserId);
+    setErr("");
+    setInfo("");
+    setLoading(true);
+  }
+  useEffect(() => {
+    if (!effectiveUserId) return undefined;
+    let alive = true;
+    readFirstPage().then(
+      (first) => { if (alive) applyFirstPage(first); },
+      (e) => { if (alive) showError(e, "history.errors.failedLoad"); },
+    ).finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveUserId]);
+
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    let cancelled = false;
+    supabase.from("profiles").select("role, inventory_screenshots_enabled, first_trip_unpaid, ten_hour_days").eq("id", effectiveUserId).maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setInventoryEnabled(Boolean(data?.inventory_screenshots_enabled) && !isAdminEmployee(data?.role));
+        setFirstTripUnpaid(Boolean(data?.first_trip_unpaid));
+        setDailyRegularMinutes(dailyRegularMinutesFor(data));
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [effectiveUserId]);
+
+  useEffect(() => {
+    if (!effectiveUserId || jobs.length === 0) return;
+    let cancelled = false;
+    const dates = jobs.map((job) => job.job_date).sort();
+    withTimeout(
+      supabase.from("inventory_screenshots").select("job_date, slot")
+        .eq("user_id", effectiveUserId).lte("slot", 3).gte("job_date", dates[0]).lte("job_date", dates[dates.length - 1])
+        .limit(QUERY_BUDGETS.inventoryRows),
+      12000
+    ).then(({ data, error }) => {
+      if (cancelled || error) return;
+      const slotsByDate = new Map();
+      for (const row of data || []) slotsByDate.set(row.job_date, new Set([...(slotsByDate.get(row.job_date) || []), row.slot]));
+      setInventoryCounts(new Map([...slotsByDate].map(([date, slots]) => [date, slots.size])));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [effectiveUserId, jobs]);
+
+  function sumHoursForJobs(list) {
+    let total = 0;
+    for (const j of list) {
+      const d1 = makeDayjsFromJob(j.job_date, j.depart);
+      const d2 = makeDayjsFromJob(j.job_date, j.fin);
+      total += hoursBetween(d1, d2) || 0;
+    }
+    return total;
+  }
+
+  function sumKmForJobs(list) {
+    let total = 0;
+    for (const j of list) total += kmTotal(j);
+    return Math.round(total * 100) / 100;
+  }
+
+  const grouped = useMemo(() => {
+    const map = new Map();
+
+    for (const j of jobs) {
+      const key = dayjs(j.job_date).format("YYYY-MM-DD");
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(j);
+    }
+
+    return Array.from(map.entries()).map(([date, sorted]) => {
+      // Within a day: start of the day first, jobs without a départ last.
+      const list = [...sorted].sort((a, b) =>
+        String(a.depart || "99").localeCompare(String(b.depart || "99"))
+        || String(a.fin || "99").localeCompare(String(b.fin || "99"))
+        || String(a.id).localeCompare(String(b.id)));
+      const totalHours = sumHoursForJobs(list);
+      const totalHHmm = toHHmmLabelFromFormatHours(formatHours(totalHours));
+      const totalKm = sumKmForJobs(list);
+
+      const submittableIds = list
+        .filter((x) => (x.status === "saved" || x.status === "updated") && x.locked === false)
+        .map((x) => x.id);
+
+      return { date, list, totalHHmm, totalKm, submittableIds };
+    });
+  }, [jobs]);
+
+  function openJob(job) {
+    navigate(`/form?edit=${job.id}`);
+  }
+
+  function isOwner(job) {
+    // « Vue en tant que » (lecture seule): the manager sees the buttons the employee sees, greyed out.
+    return Boolean(effectiveUserId) && job.user_id === effectiveUserId;
+  }
+  function canOpen(job) {
+    return isOwner(job) && (job.status === "saved" || job.status === "updated") && job.locked === false;
+  }
+  function canDelete(job) {
+    return isOwner(job) && (job.status === "saved" || job.status === "updated") && job.locked === false;
+  }
+  function canSubmit(job) {
+    return isOwner(job) && (job.status === "saved" || job.status === "updated") && job.locked === false;
+  }
+
+  // A job created by management is confirmed explicitly by the employee (the dialog shows
+  // its values); the database refuses to submit it otherwise.
+  const submitExistingJob = (job, confirmManagerEntry = false) =>
+    submitSavedJob(supabase, job, { confirmManagerEntry: confirmManagerEntry && isPendingManagerEntry(job) });
+
+  // The day must carry its end-of-shift inventory screenshots (at least one) before any job is
+  // submitted (the database enforces the same rule). Missing ones are collected from the work form.
+  async function inventoryMissingForDay(jobDate) {
+    if (isAdminEmployee(role) || !inventoryRequiredFor(jobDate)) return false;
+    const { data: profile, error: profileError } = await withTimeout(
+      supabase.from("profiles").select("inventory_screenshots_enabled").eq("id", user.id).single(),
+      10000
+    );
+    if (profileError) throw profileError;
+    if (!profile?.inventory_screenshots_enabled) return false;
+    return !inventoryCaptured(await fetchInventorySlots(supabase, user.id, jobDate));
+  }
+
+  async function deleteJob(jobId) {
+    if (isViewMode) return;
+    const ok = await confirm(t("history.confirm.delete"));
+    if (!ok) return;
+    setActionLoadingKey(jobId);
+    setErr(""); setInfo("");
+    try {
+      // Collect the screenshot file paths before deleting the job — the DB rows
+      // cascade away on delete, but the storage files must be removed explicitly.
+      const [{ data: evidence }, { data: parking }] = await Promise.all([
+        supabase.from("overtime_evidence").select("storage_path").eq("job_id", jobId),
+        supabase.from("parking_receipts").select("storage_path, extra_storage_paths").eq("job_id", jobId),
+      ]);
+      const { error } = await supabase.from("jobs").delete().eq("id", jobId);
+      if (error) throw error;
+      // Best-effort file cleanup (the job and its DB records are already gone;
+      // a storage hiccup must not report the delete as failed).
+      try {
+        const evPaths = (evidence || []).map((r) => r.storage_path).filter(Boolean);
+        const pkPaths = (parking || []).flatMap(parkingReceiptPaths);
+        if (evPaths.length) await supabase.storage.from("overtime-evidence").remove(evPaths);
+        if (pkPaths.length) await supabase.storage.from("parking-receipts").remove(pkPaths);
+      } catch { /* orphaned files are harmless */ }
+      setInfo(t("history.toasts.deleted"));
+      await load();
+    } catch (e) {
+      showError(e, "history.errors.deleteFailed");
+    } finally {
+      setActionLoadingKey(null);
+    }
+  }
+
+  async function submitJob(jobId) {
+    if (isViewMode) return;
+    const job = jobs.find((row) => row.id === jobId);
+    const managerEntry = isPendingManagerEntry(job);
+    const ok = await confirm(managerEntry
+      ? t("history.confirm.managerEntry", {
+        name: job.manager_entry_by_name || t("audit.someone"),
+        date: dayjs(job.job_date).format("DD MMM YYYY"),
+        ot: job.ot,
+        from: fmtTimeHHmm(job.depart),
+        to: fmtTimeHHmm(job.fin),
+        km: getKilometreBreakdown(job).totalKm,
+      })
+      : t("history.confirm.submit"));
+    if (!ok) return;
+    setActionLoadingKey(jobId);
+    setErr(""); setInfo("");
+    try {
+      if (!job) throw new Error(t("history.errors.submitFailed"));
+      if (!isAdminEmployee(role) && dailyOvertimeEvidenceRequirement(job, jobs, { firstTripUnpaid, dailyRegularMinutes }).required) {
+        // Over 8 h without proof: open the work form, which shows the screenshot pop-up.
+        navigate(`/form?edit=${job.id}&submit=1${managerEntry ? `&confirmed=${job.id}` : ""}`);
+        return;
+      }
+      if (await inventoryMissingForDay(job.job_date)) {
+        navigate(`/form?edit=${job.id}&submit=1${managerEntry ? `&confirmed=${job.id}` : ""}`);
+        return;
+      }
+      const overlapWarning = jobOverlapDetails(job, jobs, t);
+      if (overlapWarning) {
+        setErr(overlapWarning);
+        return;
+      }
+      await submitExistingJob(job, managerEntry);
+      setInfo(t("history.toasts.submitted"));
+      await load();
+    } catch (e) {
+      showError(e, "history.errors.submitFailed", job);
+    } finally {
+      setActionLoadingKey(null);
+    }
+  }
+
+  async function submitDay(dateKey, ids) {
+    if (isViewMode || !ids || ids.length === 0) return;
+    const hasManagerEntry = ids.some((id) => isPendingManagerEntry(jobs.find((job) => job.id === id)));
+    const ok = await confirm(t(hasManagerEntry ? "history.confirm.managerEntryDay" : "history.confirm.submitDay",
+      { date: dayjs(dateKey).format("DD MMM YYYY") }));
+    if (!ok) return;
+    const actionKey = `day:${dateKey}`;
+    setActionLoadingKey(actionKey);
+    setErr(""); setInfo("");
+    let failedCandidate = null;
+    try {
+      const selectedJobs = ids.map((id) => jobs.find((job) => job.id === id));
+      if (selectedJobs.some((job) => !job)) throw new Error(t("history.errors.submitDayFailed"));
+      if (!isAdminEmployee(role) && selectedJobs.some((job) => dailyOvertimeEvidenceRequirement(job, jobs, { firstTripUnpaid, dailyRegularMinutes }).required)) {
+        // Proof is one per day: open the day's last job so the form asks for the screenshot.
+        const lastJob = [...selectedJobs].sort((a, b) => String(a.fin || "").localeCompare(String(b.fin || ""))).pop();
+        navigate(`/form?edit=${lastJob.id}&submit=1${hasManagerEntry ? `&confirmed=${ids.join(",")}` : ""}`);
+        return;
+      }
+      const lastDayJob = [...selectedJobs].sort((a, b) => String(a.fin || "").localeCompare(String(b.fin || ""))).pop();
+      if (await inventoryMissingForDay(lastDayJob.job_date)) {
+        navigate(`/form?edit=${lastDayJob.id}&submit=1${hasManagerEntry ? `&confirmed=${ids.join(",")}` : ""}`);
+        return;
+      }
+      const overlapWarning = selectedJobs.map((job) => jobOverlapDetails(job, jobs, t)).find(Boolean);
+      if (overlapWarning) {
+        setErr(overlapWarning);
+        return;
+      }
+      for (const job of selectedJobs) {
+        try {
+          await submitExistingJob(job, hasManagerEntry);
+        } catch (error) {
+          failedCandidate = job;
+          throw error;
+        }
+      }
+      setInfo(t("history.toasts.daySubmitted", { count: ids.length }));
+      await load();
+    } catch (e) {
+      showError(e, "history.errors.submitDayFailed", failedCandidate);
+    } finally {
+      setActionLoadingKey(null);
+    }
+  }
+
+  return (
+    <AppShell>
+      <div className="space-y-3">
+        {loading && (
+          <Card><CardContent className="p-4 text-sm">{t("common.loading")}</CardContent></Card>
+        )}
+        {err && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between gap-3">
+            <span>{err}</span>
+            <Button size="sm" variant="outline" className="shrink-0 text-xs" onClick={load}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        )}
+        {info && (
+          <div className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">
+            {info}
+          </div>
+        )}
+
+        {!loading && !err && grouped.length === 0 && (
+          <Card><CardContent className="p-4 text-sm text-muted-foreground">{t("history.empty")}</CardContent></Card>
+        )}
+
+        {!loading && !err && grouped.map((g) => {
+          const dayActionKey = `day:${g.date}`;
+          const dayBusy = actionLoadingKey === dayActionKey;
+          const dayCanSubmit = g.submittableIds.length > 0;
+
+          return (
+            <div key={g.date} className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-block rounded-full border bg-muted px-3 py-1 text-xs font-bold text-muted-foreground">
+                    {dayjs(g.date).format("DD MMM YYYY")} • <b className="text-foreground">{g.totalHHmm}</b> • <b className="text-foreground">{g.totalKm}</b> km
+                  </div>
+                  {inventoryCounts && (() => {
+                    const count = inventoryCounts.get(g.date) || 0;
+                    const badge = inventoryDayBadge(g.date, count, inventoryEnabled);
+                    if (!badge) return null;
+                    return (
+                      <>
+                        <div
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${badge === "done" ? "border-success/40 bg-success/10 text-success " : "border-destructive/40 bg-destructive/10 text-destructive "}`}
+                          title={t(badge === "done" ? "history.inventory.doneTitle" : "history.inventory.missingTitle", { count })}
+                        >
+                          {t("history.inventory.label")}
+                          {badge === "done" ? <CircleCheck className="h-4 w-4" aria-label={t("history.inventory.done")} /> : <CircleX className="h-4 w-4" aria-label={t("history.inventory.missing")} />}
+                        </div>
+                        {count > 0 && (
+                          <Button type="button" variant="outline" size="icon" className="h-7 w-7 rounded-full" aria-label={t("history.inventory.view")} title={t("history.inventory.view")} onClick={() => setInventoryViewDate(g.date)}>
+                            <Images className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+                {dayCanSubmit && (
+                  <Button
+                    type="button"
+                    variant="success"
+                    size="sm"
+                    disabled={dayBusy || isViewMode}
+                    onClick={() => submitDay(g.date, g.submittableIds)}
+                    title={t("history.submitDayTitle")}
+                  >
+                    {dayBusy ? "…" : t("history.submitDay")}
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                {g.list.map((j) => {
+                  const d1 = makeDayjsFromJob(j.job_date, j.depart);
+                  const d2 = makeDayjsFromJob(j.job_date, j.fin);
+                  const totalHours = hoursBetween(d1, d2);
+
+                  const totalLabelRaw = formatHours(totalHours);
+                  const totalHHmm = toHHmmLabelFromFormatHours(totalLabelRaw);
+
+                  const { clientKm: a, returnKm: r } = getKilometreBreakdown(j);
+                  const km = a + r;
+
+                  const updatedLabel = j.updated_at ? dayjs(j.updated_at).format("DD MMM HH:mm") : "—";
+
+                  const showOpen = canOpen(j);
+                  const showDelete = canDelete(j);
+                  const showSubmit = canSubmit(j);
+                  const busy = actionLoadingKey === j.id;
+
+                  return (
+                    <Card key={j.id}>
+                      <CardContent className="space-y-3 p-4">
+                        {/* Header row: OT + status */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-sm font-bold">
+                            <span>{j.ot}</span>
+                            <JobCaptureIcons job={{ ...j, overtime_evidence_captured: overtimeMarkerIds.has(j.id), meal_claim_captured: j.meal_claim_captured || mealJobIds.has(j.id) }} />
+                            {foremanNotes.has(j.id) && <ForemanNoteIcon note={foremanNotes.get(j.id)} subtitle={`${j.ot} · ${dayjs(j.job_date).format("DD MMM")}`} />}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {isPendingManagerEntry(j) && (
+                              <Badge variant="warning" className="uppercase tracking-wide">{t("history.badge.managerEntry")}</Badge>
+                            )}
+                            <Badge variant={statusBadgeVariant(j.status)} className="uppercase tracking-wide">
+                              {t(`status.${j.status}`)}
+                            </Badge>
+                          </div>
+                        </div>
+                        {isPendingManagerEntry(j) && (
+                          <div className="text-xs font-medium text-warning">
+                            {t("history.managerEntry.from", { name: j.manager_entry_by_name || t("audit.someone") })}
+                          </div>
+                        )}
+
+                        {/* Metric pills + updated time on the same row */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-block rounded-full border bg-muted px-2 py-0.5 text-xs">
+                            {t("common.totalShort")}: <b>{totalHHmm}</b>
+                          </span>
+                          <span className="inline-block rounded-full border bg-muted px-2 py-0.5 text-xs">
+                            {t("common.kmShort")}: <b>{km}</b>
+                            {r > 0 ? <span className="font-semibold text-muted-foreground"> ({t("common.outboundShort")}: {a} / {t("common.returnShort")}: {r})</span> : null}
+                          </span>
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            {t("history.updated")}: {updatedLabel}
+                          </span>
+                        </div>
+
+                        {/* Times */}
+                        <div className="text-xs text-muted-foreground">
+                          {t("history.depart")}: {fmtTimeHHmm(j.depart)} • {t("history.arrival")}: {fmtTimeHHmm(j.arrivee)} • {t("history.end")}: {fmtTimeHHmm(j.fin)}
+                        </div>
+
+                        {/* Action buttons */}
+                        {(showOpen || showDelete || showSubmit) && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {showOpen && (
+                              <Button size="sm" variant="secondary" disabled={busy || isViewMode} onClick={() => openJob(j)}>
+                                {busy ? "…" : t("history.open")}
+                              </Button>
+                            )}
+                            {showSubmit && (
+                              <Button size="sm" variant="success" disabled={busy || isViewMode} onClick={() => submitJob(j.id)}>
+                                {busy ? "…" : t("history.submit")}
+                              </Button>
+                            )}
+                            {showDelete && (
+                              <Button size="sm" variant="destructive" disabled={busy || isViewMode} onClick={() => deleteJob(j.id)}>
+                                {busy ? "…" : t("history.delete")}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {!loading && hasMore && (
+          <div className="flex justify-center py-3">
+            <Button type="button" variant="secondary" disabled={loadingMore} onClick={loadMore}>
+              {loadingMore ? t("common.loading") : t("history.loadMore", { loaded: jobs.length })}
+            </Button>
+          </div>
+        )}
+      </div>
+      <InventoryPhotosDialog date={inventoryViewDate} userId={effectiveUserId} onClose={() => setInventoryViewDate(null)} />
+      {confirmDialog}
+    </AppShell>
+  );
+}
+
+function ExpenseIcon({ icon: Icon, label, className }) {
+  return <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${className}`} title={label} aria-label={label}><Icon className="h-3.5 w-3.5" aria-hidden="true" /></span>;
+}

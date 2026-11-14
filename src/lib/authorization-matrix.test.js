@@ -1,0 +1,177 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { APPLICATION_ROLES, authorizationFor } from "./authorization-matrix";
+import { GRANTABLE_ADMIN_SECTIONS } from "./roles";
+
+const migration = (name) => readFileSync(fileURLToPath(new URL(
+  `../../supabase/migrations/${name}`,
+  import.meta.url
+)), "utf8");
+
+const roleMigration = migration("20260923004309_subcontractor_1_role.sql");
+const submissionMigration = migration("20260927025008_0060_atomic_idempotent_job_submission.sql");
+const transitionMigration = migration("20260927025045_0061_manager_state_transition_rpcs.sql");
+const timezoneMigration = migration("20260927025233_0063_montreal_timezone_and_dst.sql");
+const privilegeMigration = migration("20260910220157_0032_owner_role_replaces_hardcoded_privileged.sql");
+const snapshotMigration = migration("20261013220000_0085_rate_snapshot_only_at_submission.sql");
+const vaultMigration = migration("20261013200000_0084_nas_server_export_and_atomic_overtime_evidence.sql");
+const encryptedNasMigration = migration("20261019120000_0102_nas_encrypted_in_vault.sql");
+
+describe("application authorization matrix", () => {
+  it("covers every persisted application role", () => {
+    expect(APPLICATION_ROLES).toEqual([
+      "employee", "foreman", "subcontractor_1", "admin", "manager", "owner",
+    ]);
+  });
+
+  it.each(["employee", "foreman", "subcontractor_1"])("keeps %s on own-time only", (role) => {
+    const permissions = authorizationFor({ role });
+    expect(permissions.canLogOwnTime).toBe(true);
+    expect(permissions.canManageAny).toBe(false);
+    expect(permissions.canAccessSensitiveNas).toBe(false);
+  });
+
+  it("gives an admin exactly the selected management sections", () => {
+    for (const granted of GRANTABLE_ADMIN_SECTIONS) {
+      const permissions = authorizationFor({ role: "admin", adminSections: [granted] });
+      expect(permissions.canManageAny).toBe(true);
+      for (const section of GRANTABLE_ADMIN_SECTIONS) {
+        expect(permissions.managementSections[section], `${granted} -> ${section}`).toBe(section === granted);
+      }
+      expect(permissions.canAccessSensitiveNas).toBe(false);
+      expect(permissions.includedInCcqPayroll).toBe(false);
+    }
+  });
+
+  it.each(["manager", "owner"])("gives %s every management section", (role) => {
+    const permissions = authorizationFor({ role });
+    expect(Object.values(permissions.managementSections).every(Boolean)).toBe(true);
+  });
+
+
+
+  it("reserves the emergency timesheet for the owner role only", () => {
+    for (const role of APPLICATION_ROLES) {
+      const pages = authorizationFor({ role, adminSections: [...GRANTABLE_ADMIN_SECTIONS] }).pages;
+      expect(pages["advanced-emergency"], role).toBe(role === "owner");
+    }
+  });
+
+  it("requires two-factor authentication for every management role (0103)", () => {
+    for (const role of APPLICATION_ROLES) {
+      expect(authorizationFor({ role }).mustUseTwoFactor, role).toBe(["owner", "manager", "admin"].includes(role));
+    }
+  });
+
+  it("reserves sensitive NAS access for the owner", () => {
+    for (const role of APPLICATION_ROLES) {
+      expect(authorizationFor({ role }).canAccessSensitiveNas, role).toBe(role === "owner");
+    }
+  });
+
+  it("contains own writes for every paused persona", () => {
+    for (const role of APPLICATION_ROLES) {
+      expect(authorizationFor({ role, paused: true }).canLogOwnTime, role).toBe(false);
+    }
+  });
+
+  it("keeps employee and manager CCQ treatment separate from non-CCQ roles", () => {
+    expect(authorizationFor({ role: "employee" }).includedInCcqPayroll).toBe(true);
+    expect(authorizationFor({ role: "foreman" }).includedInCcqPayroll).toBe(true);
+    expect(authorizationFor({ role: "manager" }).includedInCcqPayroll).toBe(true);
+    for (const role of ["admin", "owner", "subcontractor_1"]) {
+      expect(authorizationFor({ role }).includedInCcqPayroll, role).toBe(false);
+    }
+  });
+});
+
+describe("database authorization contract", () => {
+  it("maps owner to manager and subcontractor to employee tier", () => {
+    expect(roleMigration).toMatch(/role = 'owner' then 'manager'/);
+    expect(roleMigration).toMatch(/role in \('admin', 'subcontractor_1'\) then 'employee'/);
+  });
+
+  it("requires active ownership for direct job drafts", () => {
+    expect(submissionMigration).toContain("public.is_not_paused()");
+    expect(submissionMigration).toContain("user_id = auth.uid()");
+    expect(submissionMigration).toContain("status = 'saved'");
+  });
+
+  it("resolves a retried submission key before the validator can see it as an overlap", () => {
+    const lookup = submissionMigration.indexOf("where j.user_id = caller_id and j.submission_key = p_submission_key");
+    const insert = submissionMigration.indexOf("insert into public.jobs");
+    expect(lookup).toBeGreaterThan(-1);
+    expect(lookup).toBeLessThan(insert);
+    expect(submissionMigration).toContain("pg_advisory_xact_lock(hashtextextended(caller_id::text, 0))");
+    expect(timezoneMigration).toContain("pg_advisory_xact_lock(hashtextextended(new.user_id::text, 0))");
+    expect(submissionMigration).toContain("jobs_user_submission_key_uniq");
+    expect(submissionMigration).not.toContain("create unique index");
+  });
+
+  it("removes broad manager writes and role-checks every transition RPC", () => {
+    expect(transitionMigration).toContain('drop policy if exists "jobs: manager update all"');
+    expect(transitionMigration).toContain('drop policy if exists "jobs: manager insert"');
+    expect(transitionMigration.match(/public\.get_my_role\(\) <> 'manager'/g)).toHaveLength(3);
+  });
+
+  it("keeps database privilege owner-only", () => {
+    expect(privilegeMigration).toMatch(/role = 'owner'/);
+    expect(privilegeMigration).not.toMatch(/role in \('manager', 'owner'\)/);
+  });
+
+  it("makes the NAS vault RPC-only, owner-only, audited and rate-limited (0084)", () => {
+    for (const policy of ["privileged read", "privileged insert", "privileged update"]) {
+      expect(vaultMigration).toContain(`drop policy if exists "sensitive: ${policy}" on public.employee_sensitive`);
+    }
+    expect(vaultMigration).toContain("revoke all on public.employee_sensitive from anon, authenticated");
+    expect(vaultMigration).not.toMatch(/create policy[^;]*employee_sensitive/);
+    for (const fn of ["set_nas", "export_ccq_nas"]) {
+      const body = vaultMigration.slice(vaultMigration.indexOf(`function public.${fn}(`));
+      expect(body.slice(0, body.indexOf("$function$;")), fn).toContain("if not public.is_privileged() then");
+    }
+    expect(vaultMigration).toContain("'export_reason_required'");
+    expect(vaultMigration).toContain("'nas_export_rate_limited'");
+    expect(vaultMigration).toContain("'nas_bulk_export'");
+    expect(vaultMigration).toContain("'nas_update'");
+  });
+
+  it("keeps the NAS encrypted in Supabase Vault, with the same owner-only RPC contract (0102)", () => {
+    const m = encryptedNasMigration;
+    // The plain-text column is moved into Vault secrets, then dropped: a dump only holds ciphertext.
+    expect(m).toContain("vault.create_secret(r.nas,");
+    expect(m).toContain("alter table public.employee_sensitive drop column nas;");
+    expect(m).not.toMatch(/add column[^;]*\bnas text/);
+    // Still no table policy or grant for the browser.
+    expect(m).not.toMatch(/create policy/i);
+    expect(m).not.toMatch(/grant [^;]* on (table )?public\.employee_sensitive/i);
+    for (const fn of ["reveal_nas", "set_nas", "nas_presence", "export_ccq_nas"]) {
+      const body = m.slice(m.indexOf(`function public.${fn}(`));
+      expect(body.slice(0, body.indexOf("$function$;")), fn).toContain("public.is_privileged()");
+      expect(body.slice(0, body.indexOf("$function$;")), fn).not.toMatch(/\bs\.nas\b|select nas\b/);
+      expect(m, fn).toMatch(new RegExp(`revoke all on function public\\.${fn}\\([^)]*\\) from public, anon;`));
+    }
+    // Audits are unchanged and never carry the number.
+    expect(m).toContain("'nas_reveal'");
+    expect(m).toContain("'nas_update'");
+    expect(m).toContain("jsonb_build_object('cleared', clean is null)");
+    expect(m).toContain("'nas_bulk_export'");
+    expect(m).toContain("'export_reason_required'");
+    expect(m).toContain("'nas_export_rate_limited'");
+    // A deleted row (employee deleted) takes its secret with it; the trigger function is not callable.
+    expect(m).toContain("after delete on public.employee_sensitive");
+    expect(m).toContain("revoke all on function public.employee_sensitive_drop_secret() from public, anon, authenticated;");
+  });
+
+  it("records an overtime proof only with its job, inside one function (0084)", () => {
+    expect(vaultMigration).toContain('drop policy if exists "overtime evidence: owner insert" on public.overtime_evidence');
+    expect(vaultMigration).toContain("coalesce(p_overtime_evidence_captured, false) and day_has_evidence");
+    expect(vaultMigration).toContain("'evidence_file_missing'");
+    expect(vaultMigration).toContain("'invalid_evidence_path'");
+  });
+
+  it("stamps the rate snapshot only at submission, never on an export rollback (0085)", () => {
+    expect(snapshotMigration).toContain("tg_op = 'INSERT' or coalesce(old.status, 'saved') in ('saved', 'updated')");
+    expect(snapshotMigration).not.toMatch(/if new\.status = 'submitted'\s*\n\s*or/);
+  });
+});

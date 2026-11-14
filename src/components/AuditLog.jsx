@@ -1,0 +1,201 @@
+import React, { useEffect, useState } from "react";
+import dayjs from "dayjs";
+import { BellRing, CalendarPlus, DoorOpen, ImageOff, EyeOff, FilePlus2, Megaphone, Images, RefreshCw, UserCheck, ShieldCheck, Trash2, Unlock, CheckCircle2, PauseCircle, UserCog, Utensils, SquareParking, Eye, KeyRound, FileDown, Clock, Car, ShieldAlert } from "lucide-react";
+import { supabase } from "../supabaseClient";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import { useT } from "@/lib/use-t";
+import { isAbortError, useLatestRequest } from "@/lib/latest-request";
+
+const PAGE_SIZE = 100;
+
+const ACTION_META = {
+  user_deleted: { icon: Trash2, tone: "text-destructive" },
+  inventory_deleted: { icon: Images, tone: "text-destructive" },
+  role_change: { icon: UserCog, tone: "text-primary" },
+  pause_change: { icon: PauseCircle, tone: "text-warning" },
+  job_unlock: { icon: Unlock, tone: "text-warning" },
+  job_approved: { icon: CheckCircle2, tone: "text-success" },
+  job_created_by_owner: { icon: FilePlus2, tone: "text-primary" },
+  manager_entry_confirmed: { icon: UserCheck, tone: "text-success" },
+  manager_entry_deleted: { icon: Trash2, tone: "text-destructive" },
+  manager_entry_reminded: { icon: BellRing, tone: "text-warning" },
+  meal_reviewed: { icon: Utensils, tone: "text-primary" },
+  parking_reviewed: { icon: SquareParking, tone: "text-primary" },
+  parking_review_reset: { icon: SquareParking, tone: "text-warning" },
+  approval_reverted: { icon: Clock, tone: "text-warning" },
+  travel_rule_set: { icon: Car, tone: "text-primary" },
+  accident_logged: { icon: ShieldAlert, tone: "text-destructive" },
+  accident_status: { icon: ShieldAlert, tone: "text-warning" },
+  accident_file_added: { icon: ShieldAlert, tone: "text-info" },
+  accident_file_removed: { icon: ShieldAlert, tone: "text-warning" },
+  broadcast_edited: { icon: Megaphone, tone: "text-primary" },
+  departure_change: { icon: DoorOpen, tone: "text-warning" },
+  start_date_change: { icon: CalendarPlus, tone: "text-info" },
+  file_read_error: { icon: ImageOff, tone: "text-destructive" },
+  broadcast_withdrawn: { icon: EyeOff, tone: "text-warning" },
+  nas_reveal: { icon: Eye, tone: "text-warning" },
+  nas_update: { icon: KeyRound, tone: "text-warning" },
+  nas_bulk_export: { icon: FileDown, tone: "text-destructive" },
+};
+
+// Every access to the NAS vault (migrations 0026 and 0084), grouped under one filter.
+const NAS_ACTIONS = ["nas_reveal", "nas_update", "nas_bulk_export"];
+
+export default function AuditLog() {
+  const t = useT();
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState("all");
+  // The list shown answers `loaded`; it is loading until the answer for the current filter (and the
+  // latest « Actualiser ») arrives.
+  const [reloads, setReloads] = useState(0);
+  const [loaded, setLoaded] = useState(null);
+  const loadKey = `${filter}:${reloads}`;
+  const loading = loaded !== loadKey;
+
+  // Latest filter wins: switching filters aborts the previous request and ignores its answer.
+  const request = useLatestRequest();
+  useEffect(() => {
+    const ticket = request.begin();
+    let query = supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(PAGE_SIZE);
+    if (filter === "nas") query = query.in("action", NAS_ACTIONS);
+    else if (filter !== "all") query = query.eq("action", filter);
+    query.abortSignal(ticket.signal).then(({ data, error: loadError }) => {
+      if (!ticket.isCurrent()) return;
+      if (loadError) { if (!isAbortError(loadError)) setError(loadError.message); }
+      else { setError(""); setRows(data || []); }
+      setLoaded(loadKey);
+    });
+  }, [filter, loadKey, request]);
+
+  function describe(row) {
+    const target = row.target_name || t("audit.someone");
+    const d = row.details || {};
+    switch (row.action) {
+      case "user_deleted": return t("audit.desc.userDeleted", { name: target, email: d.email || "—" });
+      case "inventory_deleted": return t("audit.desc.inventoryDeleted", { name: target, date: d.job_date || "—", count: d.count || 0 });
+      case "inventory_negative_dismissed": return t("audit.desc.inventoryNegativeDismissed", { name: target, date: d.job_date || "—" });
+      case "role_change": return t("audit.desc.roleChange", { name: target, from: d.from || "—", to: d.to || "—" });
+      case "pause_change": return t(d.is_paused ? "audit.desc.paused" : "audit.desc.unpaused", { name: target });
+      case "job_unlock": return t("audit.desc.jobUnlock", { name: target, date: d.job_date || "—" });
+      case "job_approved": return t("audit.desc.jobApproved", { name: target, date: d.job_date || "—" });
+      case "job_created_by_owner": return t("audit.desc.jobCreatedByOwner", { name: target, date: d.job_date || "—" });
+      case "manager_entry_confirmed": return t("audit.desc.managerEntryConfirmed", { name: target, date: d.job_date || "—" });
+      case "manager_entry_deleted": return t("audit.desc.managerEntryDeleted", { name: target, date: d.job_date || "—" });
+      case "manager_entry_reminded": return t("audit.desc.managerEntryReminded", { name: target, date: d.job_date || "—" });
+      case "meal_reviewed": return t("audit.desc.mealReviewed", { name: target, status: d.status || "—" });
+      case "parking_reviewed": return t("audit.desc.parkingReviewed", { name: target, status: d.status || "—" });
+      case "parking_review_reset": return t("audit.desc.parkingReviewReset", { name: target, date: d.job_date || "—" });
+      case "approval_reverted": return t("audit.desc.approvalReverted", { name: target, count: d.jobs ?? 0, from: d.from || "—", to: d.to || "—" });
+      case "accident_logged": return t("audit.desc.accidentLogged", { name: target, date: d.occurred_on || "—" });
+      case "accident_file_added": return t("audit.desc.accidentFileAdded", { name: target, date: d.occurred_on || "—" });
+      case "accident_file_removed": return t("audit.desc.accidentFileRemoved", { name: target, date: d.occurred_on || "—" });
+      case "accident_status": return t("audit.desc.accidentStatus", { name: target, date: d.occurred_on || "—", to: t(`accidents.status.${d.to}`) });
+      case "travel_rule_set": return t("audit.desc.travelRuleSet", {
+        name: target, rule: t(`travel.rule.${d.rule_key}`), choice: t(`travel.choice.${d.choice}`), date: d.effective_from || "—",
+      });
+      case "departure_change": return d.to
+        ? t("audit.desc.departureSet", { name: target, status: t(`employees.status.${d.to}`), note: d.note ? ` — ${d.note}` : "" })
+        : t("audit.desc.departureCleared", { name: target });
+      case "file_read_error": return t("audit.desc.fileReadError", {
+        name: target,
+        context: t(`audit.fileContext.${d.context}`),
+        size: d.size >= 0 ? `${Math.round(d.size / 1024)} Ko` : "?",
+        age: d.age_s >= 0 ? (d.age_s < 120 ? `${d.age_s} s` : d.age_s < 7200 ? `${Math.round(d.age_s / 60)} min` : `${Math.round(d.age_s / 3600)} h`) : "?",
+        step: t(`audit.fileStep.${d.step}`),
+        error: d.error || "?",
+        attempts: d.attempts ?? 1,
+        app: t(d.app === "installed" ? "audit.fileApp.installed" : "audit.fileApp.browser"),
+      });
+      case "start_date_change": return d.to
+        ? t("audit.desc.startDateSet", { name: target, date: dayjs(d.to).format("D MMM YYYY") })
+        : t("audit.desc.startDateCleared", { name: target });
+      case "broadcast_edited": return t(d.reread ? "audit.desc.broadcastEditedReread" : "audit.desc.broadcastEdited", { text: target, count: d.reread_count ?? 0 });
+      case "broadcast_withdrawn": return t("audit.desc.broadcastWithdrawn", { text: target, count: d.count ?? 0 });
+      case "nas_reveal": return t("audit.desc.nasReveal", { name: target });
+      case "nas_update": return t(d.cleared ? "audit.desc.nasCleared" : "audit.desc.nasUpdate", { name: target });
+      case "nas_bulk_export": return t("audit.desc.nasBulkExport", { count: d.returned ?? 0, reason: d.reason || "—" });
+      default: return row.action;
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-5 w-5 text-primary" />{t("audit.title")}</div>
+            <p className="mt-1 text-xs text-muted-foreground">{t("audit.description")}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label={t("audit.filterLabel")} className="h-9">
+              <option value="all">{t("audit.filter.all")}</option>
+              <option value="user_deleted">{t("audit.filter.userDeleted")}</option>
+              <option value="inventory_deleted">{t("audit.filter.inventoryDeleted")}</option>
+              <option value="inventory_negative_dismissed">{t("audit.filter.inventoryNegativeDismissed")}</option>
+              <option value="role_change">{t("audit.filter.roleChange")}</option>
+              <option value="pause_change">{t("audit.filter.pauseChange")}</option>
+              <option value="job_unlock">{t("audit.filter.jobUnlock")}</option>
+              <option value="job_approved">{t("audit.filter.jobApproved")}</option>
+              <option value="job_created_by_owner">{t("audit.filter.jobCreatedByOwner")}</option>
+              <option value="meal_reviewed">{t("audit.filter.mealReviewed")}</option>
+              <option value="parking_reviewed">{t("audit.filter.parkingReviewed")}</option>
+              <option value="travel_rule_set">{t("audit.filter.travelRuleSet")}</option>
+              <option value="departure_change">{t("audit.filter.departureChange")}</option>
+              <option value="start_date_change">{t("audit.filter.startDateChange")}</option>
+              <option value="file_read_error">{t("audit.filter.fileReadError")}</option>
+              <option value="broadcast_edited">{t("audit.filter.broadcastEdited")}</option>
+              <option value="broadcast_withdrawn">{t("audit.filter.broadcastWithdrawn")}</option>
+              <option value="nas">{t("audit.filter.nas")}</option>
+            </Select>
+            <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => setReloads((count) => count + 1)}>
+              <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />{t("live.refresh")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="text-sm font-semibold">{t("audit.legendTitle")}</div>
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            <li>🗑️ {t("audit.legend.userDeleted")}</li>
+            <li>👤 {t("audit.legend.roleChange")}</li>
+            <li>⏸️ {t("audit.legend.pauseChange")}</li>
+            <li>🔓 {t("audit.legend.jobUnlock")}</li>
+            <li>✅ {t("audit.legend.jobApproved")}</li>
+            <li>🍽️ {t("audit.legend.mealParking")}</li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      {error && !loading && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {!loading && rows.length === 0 && <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">{t("audit.empty")}</CardContent></Card>}
+
+      <div className="space-y-2">
+        {rows.map((row) => {
+          const meta = ACTION_META[row.action] || { icon: ShieldCheck, tone: "text-muted-foreground" };
+          const Icon = meta.icon;
+          return (
+            <Card key={row.id}>
+              <CardContent className="flex items-start gap-3 p-3">
+                <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${meta.tone}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm">{describe(row)}</div>
+                  {row.action === "file_read_error" && row.details?.browser && (
+                    <div className="mt-0.5 break-all font-mono text-xs text-muted-foreground">{row.details.browser}</div>
+                  )}
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {t("audit.byLine", { actor: row.actor_name || t("audit.someone") })} · {dayjs(row.created_at).format("DD MMM YYYY, HH:mm")}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

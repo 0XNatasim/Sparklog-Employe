@@ -1,0 +1,535 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// CCQ collective-agreement benefit accounting.
+//
+// This sits UPSTREAM of the pure tax engine (spec step 17: TIME → CCQ → GROSS →
+// PAYROLL). It contains NO tax logic. Given a period's worked hours + hourly wage
+// it produces the CCQ benefit amounts, the per-base adjustments the engine folds
+// in through `calculatePayroll({ baseAdjustments })`, and the CCQ-specific net
+// withholdings (pension + MÉDIC) the caller subtracts from take-home pay.
+//
+// ⚠️  DRAFT / TEST-BENCH VALUES — not finalized pay. Every result stays
+// `requires_review` until validated against WebRAS/PDOC with specialist sign-off.
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Source: CCQ, secteur institutionnel-commercial, métier électricien (code 220),
+// annexe C3 (aussi C4-C5), en vigueur du 26 avril 2026 au 24 avril 2027.
+//
+// Two DISTINCT "avantages sociaux" components — do not conflate them (this was the
+// bug behind the earlier reverse-engineered 5,797 $/h):
+//
+//   1. Cotisation salariale au régime de retraite — employee pension contribution.
+//      = wage × (1 + 13% indemnity) × pension rate (9% compagnon / 4,5% apprenti).
+//      It is DEDUCTIBLE from the employee's taxable income AND withheld from pay.
+//      It follows the wage automatically (no hardcoded per-hour amount), so it
+//      tracks the annual wage increase. Compagnon C3 2026: 50,79 × 1,13 × 9% =
+//      5,165343 $/h.
+//
+//   2. MÉDIC Construction — employee insurance premium + Québec 9% insurance tax.
+//      = 0,68 $/h × 1,09 = 0,7412 $/h. It is WITHHELD from pay but is NOT a tax
+//      deduction (it does not reduce taxable income). The CCQ exceptionally held
+//      the premium at 0,68 $/h through 2027-04-24 (vs the 0,86 $ in the agreement).
+//
+//   3. Avantage imposable additionnel — 3,377 $/h, same for every level of the
+//      trade (the CCQ does not vary it by apprenticeship period). It INCREASES the
+//      RRQ pensionable + Québec taxable bases. Source: CCQ ICI 2026-2027 table
+//      (tests/Tableau-Institutionnel-Commercial-2026-2027.pdf, ligne Électricien).
+//
+//   4. Indemnité de congés (vacances 6% + fériés 5,5% + maladie 1,5% = 13% of the
+//      base wage). It is pensionable (RRQ) + insurable (EI/RQAP) + Québec taxable.
+
+export const CCQ_ELECTRICIAN_IC_C3 = {
+  trade: "Électricien (métier 220)",
+  sector: "Institutionnel-commercial",
+  annex: "C3",
+  effectiveFrom: "2026-04-26",
+  effectiveTo: "2027-04-24",
+
+  // Avantage imposable MÉDIC Construction (assurance vie + maladie) — per worked hour.
+  // Source: CCQ "Avantages sociaux MÉDIC Construction — Avantages imposables", secteur
+  // institutionnel-commercial, en vigueur du 2026-04-26 au 2027-04-24, ligne Électricien
+  // (code 220): colonne C3/C4-C5 = 3,377 $, colonne C6/C7-C8 = 3,408 $.
+  // It is a QUÉBEC taxable benefit AND pensionable (RRQ), but the CRA does NOT require
+  // the employer to withhold on it at source (reported on a T4A at year-end), so it is
+  // EXCLUDED from the federal source-deduction base: fédéral = provincial − ce montant.
+  taxableBenefitPerHour: 3.377,
+  // Indemnité de congés annuels + fériés + maladie (6 + 5,5 + 1,5 %).
+  vacationHolidaySickRate: 0.13,
+  // MÉDIC Construction employee premium + Québec insurance tax (net withholding). The rate
+  // in force for this annex window (0,68 $/h); dated rates are in MEDIC_RATES below. The tax rate
+  // is dated too (MEDIC_TAX_RATES: 9 % until 2026-12-31, 9,975 % after); this value is the one
+  // of the annex window's start, kept for reference.
+  medicEmployeePerHour: 0.68,
+  medicProvincialTaxRate: 0.09,
+
+  // Safety-equipment allowance — a NON-taxable amount paid on top (like KM). Per hour.
+  // Source: stub D0033-0007 transaction line "Équipement de sécurité" @ 0,8000 $/h.
+  safetyEquipmentPerHour: 0.80,
+
+  // Salaires C3 en vigueur le 26 avril 2026, taux de cotisation retraite salariale, et
+  // cotisation patronale « avantages sociaux » par heure travaillée. Celle-ci est
+  // affichée au talon comme un gain imputé puis retirée (écriture nulle : ni argent,
+  // ni assiette fiscale). Source : ACQ, « Taux horaires suggérés de la main-d'œuvre »,
+  // 26 avril 2026 (docs/reference/acq-grilles-taux-ici-2026-04-26.pdf), ligne
+  // Électricien, colonne (8) Avantages sociaux : compagnon 8,875 $, apprentis 7,955 $.
+  levels: {
+    journeyman:  { label: "Compagnon",  hourlyWage: 50.79, employeePensionRate: 0.09,  employerSocialBenefitPerHour: 8.875 },
+    apprentice1: { label: "Apprenti 1", hourlyWage: 25.40, employeePensionRate: 0.045, employerSocialBenefitPerHour: 7.955 },
+    apprentice2: { label: "Apprenti 2", hourlyWage: 30.47, employeePensionRate: 0.045, employerSocialBenefitPerHour: 7.955 },
+    apprentice3: { label: "Apprenti 3", hourlyWage: 35.55, employeePensionRate: 0.045, employerSocialBenefitPerHour: 7.955 },
+    apprentice4: { label: "Apprenti 4", hourlyWage: 43.17, employeePensionRate: 0.045, employerSocialBenefitPerHour: 7.955 },
+  },
+};
+
+// Ordered level keys, for building a picker.
+export const CCQ_LEVELS = Object.keys(CCQ_ELECTRICIAN_IC_C3.levels);
+
+// Today's date in Montréal (YYYY-MM-DD), for callers that give no pay week.
+const montrealToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+
+// ── Rates the owner can change in the app (« Taux et barèmes », migration 0130) ─────────────
+// Dated overrides loaded from `payroll_rates`; the constants in this file are the fallback, so an empty
+// table (or a failed read) changes nothing. A row applies from its `effectiveFrom` (YYYY-MM-DD, the pay
+// week) until a later row of the same key.
+export const PAYROLL_RATE_KEYS = Object.freeze([
+  "medic_employee_per_hour", "medic_employer_per_hour", "medic_tax_rate",
+  "ccq_prelevement_rate", "caisse_education_per_hour",
+  "pension_rate_journeyman", "pension_rate_apprentice",
+  "social_benefit_journeyman", "social_benefit_apprentice",
+]);
+
+let rateOverrides = [];
+
+// Replace the loaded overrides (rows: { key, effective_from | effectiveFrom, value }). Unknown keys and
+// non-numeric values are ignored.
+export function setPayrollRateOverrides(rows = []) {
+  rateOverrides = (Array.isArray(rows) ? rows : [])
+    .map((r) => ({ key: r?.key, effectiveFrom: String(r?.effectiveFrom ?? r?.effective_from ?? "").slice(0, 10), value: Number(r?.value) }))
+    .filter((r) => PAYROLL_RATE_KEYS.includes(r.key) && /^\d{4}-\d{2}-\d{2}$/.test(r.effectiveFrom) && Number.isFinite(r.value))
+    .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0));
+}
+
+export function getPayrollRateOverrides() {
+  return rateOverrides.map((r) => ({ ...r }));
+}
+
+// The value of `key` for the pay week `date`: the latest override that has started, else `fallback`.
+export function payrollRateOn(key, date, fallback) {
+  const d = String(date || montrealToday()).slice(0, 10);
+  let found = null;
+  for (const r of rateOverrides) if (r.key === key && r.effectiveFrom <= d) found = r;
+  return found ? found.value : fallback;
+}
+
+const levelGroup = (level) => (level === "journeyman" || !CCQ_ELECTRICIAN_IC_C3.levels[level] ? "journeyman" : "apprentice");
+
+// Employee pension rate for a level on a pay week (9 % compagnon / 4,5 % apprenti unless changed).
+export function employeePensionRateFor(level, date) {
+  const levels = CCQ_ELECTRICIAN_IC_C3.levels;
+  const base = (levels[level] ?? levels.journeyman).employeePensionRate;
+  return payrollRateOn(`pension_rate_${levelGroup(level)}`, date, base);
+}
+
+// Employer avantages-sociaux rate per worked hour for a level (unknown level → compagnon).
+export function employerSocialBenefitRateFor(level, date) {
+  const levels = CCQ_ELECTRICIAN_IC_C3.levels;
+  const base = (levels[level] ?? levels.journeyman).employerSocialBenefitPerHour;
+  return payrollRateOn(`social_benefit_${levelGroup(level)}`, date, base);
+}
+
+// ── Union dues (cotisation syndicale) by union ─────────────────────────────────
+// A FEDERAL income-tax deduction (T4127 U1); a Québec credit (not a base deduction).
+// Each union's weekly formula, from ccq.org "Cotisations redistribuées aux
+// associations syndicales" (+ the member's stub where confirmed):
+//   • rateOfHourlyWage — % of ONE hour's wage per week (compagnon)
+//   • apprenticeRateOfHourlyWage — the apprentice % where it differs
+//   • perHour — added per hour worked
+//   • flatByLevel — a fixed weekly amount that REPLACES the formula for that level
+// ⚠️ Draft: compagnon rates are the best-sourced; some apprentice figures are
+// partial. Confirm per member's local/annexe before finalized use.
+// CCQ prélèvement (regulatory levy) rate: 0,75 % of the CCQ-reportable wage (base
+// wage, EXCLUDING the team-leader premium) + the vacation indemnity. The 0,75 % rate
+// is documented (ccq.org); the base was derived from stub D0033-0007
+// (0,0075 × (2 031,60 + 264,11) = 17,22 $, to the cent). Draft — confirm the base
+// (premium in/out) against the CCQ prélèvement rule before finalized use.
+export const CCQ_PRELEVEMENT_RATE = 0.0075;
+
+// Caisse d'éducation syndicale — a SECTORAL contribution (NOT per-union): the CCQ has
+// the employer deduct 0,02 $ per hour worked in the Industriel, Institutionnel-commercial
+// (ICI) and Génie civil et voirie sectors. (In the Résidentiel sector this contribution
+// is instead paid by the employer.) SparkLog is ICI, so it is an employee deduction here,
+// the same 0,02 $/h regardless of the worker's union. Source: ccq.org — règles de paie.
+export const CCQ_CAISSE_EDUCATION_PER_HOUR = 0.02;
+
+// Source officielle des taux actuels : CCQ — « Cotisations syndicales »
+//   https://www.ccq.org/fr-CA/avantages-sociaux/salaire-taux/cotisations-syndicales
+// ⚠️ Les cotisations NE PARTAGENT PAS une date d'entrée en vigueur unique — chacune a la
+// sienne (`effectiveFrom` ci-dessous). Le changement CCQ du 28 juin 2026 ne touche QUE
+// CSN-Construction et SQC (confirmé par le membre + la CCQ) : NE PAS reculer/avancer les
+// autres associations sur cette date. FTQ-FIPOE et International 568 ne sont PAS un « taux
+// unique par association » : ce sont les formules ÉLECTRICIEN (métier 220) du syndicat/
+// local, qui varient selon le local, le métier et la période d'apprentissage — vérifier
+// le local/métier/période avant tout usage finalisé.
+export const CCQ_UNION_DUES_SOURCE = "https://www.ccq.org/fr-CA/avantages-sociaux/salaire-taux/cotisations-syndicales";
+
+// Each union carries a DATED list of rules (`rules`, ascending by `effectiveFrom`) so a
+// pay computed for a past week uses the formula that was in force THAT week — see
+// `unionDuesRuleFor(union, date)` / the `date` arg on `computeUnionDues`. A rule shape:
+//   • rateOfHourlyWage         — % of ONE hour's wage per week (compagnon)
+//   • apprenticeRateOfHourlyWage — the apprentice % where it differs
+//   • perHour                  — added per hour worked
+//   • flatByLevel              — a fixed weekly amount that REPLACES the formula for a level
+export const CCQ_UNIONS = {
+  ftq_fipoe: {
+    label: "FTQ-FIPOE",
+    rules: [
+      {
+        effectiveFrom: "2024-06-30",
+        // Électricien : 55 % du taux horaire (apprenti selon sa période, basé sur ICI-I)
+        // + 0,05 $/h travaillée. Formule du syndicat/métier, pas un taux unique. Confirmé
+        // vs le talon de Simon B. (0,55 × 50,79 + 0,05 × 40 = 29,93 $).
+        // Imprimé au cent : la partie taux est arrondie AVANT d'ajouter 0,05 $/h
+        // (0,55 × 50,79 = 27,93 ; + 0,05 × 34,25 = 29,64). 23 talons sur 23 (S3–S25 2026).
+        dues: { rateOfHourlyWage: 0.55, perHour: 0.05, roundRatePart: true },
+      },
+    ],
+  },
+  international_568: {
+    label: "International (FIPOE 568)",
+    rules: [
+      {
+        effectiveFrom: "2023-12-31",
+        // Électricien (local 568, celui des électriciens au Québec) : compagnon 65 % du
+        // taux compagnon électricien INDUSTRIEL + 0,05 $/h; apprenti 50 % du taux
+        // compagnon industriel + 0,05 $/h. Formule du local, pas un taux unique.
+        dues: { rateOfHourlyWage: 0.65, apprenticeRateOfHourlyWage: 0.50, perHour: 0.05 },
+      },
+    ],
+  },
+  csd: {
+    label: "CSD Construction",
+    rules: [
+      {
+        effectiveFrom: "2024-12-29", // inchangé depuis déc. 2024 (NON touché par le 28 juin 2026)
+        // 50 % de la 1re heure déclarée + 0,035 $ × heures déclarées (tous les membres).
+        dues: { rateOfHourlyWage: 0.50, perHour: 0.035 },
+      },
+    ],
+  },
+  csn: {
+    label: "CSN-Construction",
+    rules: [
+      {
+        effectiveFrom: "2025-12-28", effectiveTo: "2026-06-27", // fenêtre antérieure (source: membre)
+        // Compagnon/occupation 19,95 $/sem; apprenti (tous) 9,90 $/sem.
+        dues: { flatByLevel: { journeyman: 19.95, apprentice1: 9.90, apprentice2: 9.90, apprentice3: 9.90, apprentice4: 9.90 } },
+      },
+      {
+        effectiveFrom: "2026-06-28", // nouveau mode de calcul (rapport de juillet 2026)
+        // Compagnon/occupation 50 % de la 1re heure travaillée; apprenti P1 9,90 $/sem,
+        // P2 10,45 $/sem, P3+ 11,70 $/sem.
+        dues: { rateOfHourlyWage: 0.50, perHour: 0, flatByLevel: { apprentice1: 9.90, apprentice2: 10.45, apprentice3: 11.70, apprentice4: 11.70 } },
+      },
+    ],
+  },
+  sqc: {
+    label: "SQC",
+    rules: [
+      {
+        // Date de début exacte non sourcée; seule la fin (27 juin 2026) est confirmée.
+        // Sert de repli pour toute semaine ≤ 2026-06-27.
+        effectiveTo: "2026-06-27", effectiveFromUnconfirmed: true,
+        // Compagnon 14,90 $, P1 9,95 $, P2 10,50 $, P3-P5 11,75 $ (montant fixe/semaine).
+        dues: { flatByLevel: { journeyman: 14.90, apprentice1: 9.95, apprentice2: 10.50, apprentice3: 11.75, apprentice4: 11.75 } },
+      },
+      {
+        effectiveFrom: "2026-06-28", // nouveau mode de calcul (rapport de juillet 2026)
+        // Compagnon 15,25 $, P1 9,95 $, P2 10,75 $, P3-P5 11,95 $ (montant fixe/semaine).
+        dues: { flatByLevel: { journeyman: 15.25, apprentice1: 9.95, apprentice2: 10.75, apprentice3: 11.95, apprentice4: 11.95 } },
+      },
+    ],
+  },
+};
+
+// Pick the union-dues rule in force for `date` (YYYY-MM-DD). A rule matches when
+// `date` is within [effectiveFrom, effectiveTo] (either bound may be open). With no
+// `date`, returns the CURRENT rule (the one with the latest effectiveFrom, i.e. no
+// effectiveTo). A `date` outside every window clamps to the nearest rule (earliest if
+// before all, latest if after all) so a computation always resolves to a real formula.
+export function unionDuesRuleFor(union, date) {
+  const u = CCQ_UNIONS[union];
+  if (!u || !Array.isArray(u.rules) || u.rules.length === 0) return null;
+  // Sort ascending; a missing effectiveFrom sorts earliest (open lower bound).
+  const rules = [...u.rules].sort((a, b) => String(a.effectiveFrom || "").localeCompare(String(b.effectiveFrom || "")));
+  const current = rules[rules.length - 1]; // latest window = the one in force today
+  if (!date) return current;
+  const d = String(date).slice(0, 10);
+  const inWindow = (r) => (r.effectiveFrom == null || d >= r.effectiveFrom) && (r.effectiveTo == null || d <= r.effectiveTo);
+  const match = rules.filter(inWindow);
+  if (match.length) return match[match.length - 1]; // latest matching window
+  // Outside every window: clamp to the nearest edge.
+  if (d < String(rules[0].effectiveFrom || "")) return rules[0];
+  return current;
+}
+
+// Base for the 13 % indemnité de congés (and the prélèvement): the wage EARNED at the
+// regular + overtime rates — regular hours at the base rate plus overtime hours weighted
+// by their multiplier (1,5× / 2×) — EXCLUDING the non-CCQ premium (team_leader_premium).
+// The CCQ team-leader premium (team_leader_premium_ccq) is added by the callers as
+// `ccqPremiumPay` (owner decision 2026-10-13: in the 13 % and the prélèvement). This matches the
+// employer's talon: e.g. 31 h + 2 h temps double = (31 + 2×2) × 50,79 = 1 777,65 $, so
+// the 13 % lands on the overtime premium too (not on straight hours × base rate).
+export function vacationableWage({ hours = 0, hourlyWage = 0, overtime150Hours = 0, overtime200Hours = 0 } = {}) {
+  const wage = Number(hourlyWage) || 0;
+  const ot15 = Math.max(0, Number(overtime150Hours) || 0);
+  const ot20 = Math.max(0, Number(overtime200Hours) || 0);
+  const regular = Math.max(0, (Number(hours) || 0) - ot15 - ot20);
+  return wage * (regular + ot15 * 1.5 + ot20 * 2);
+}
+
+// Auto-computed CCQ levies withheld from pay (also federal U1 deductions): the
+// prélèvement CCQ (0,75 % of the reportable wage — NOT per-union) and the caisse
+// d'éducation syndicale (0,02 $/h sectoral — NOT per-union). Returns period dollars.
+// The per-union cotisation syndicale is a SEPARATE deduction (computeUnionDues).
+export function computeCcqLevies({
+  hours = 0,
+  hourlyWage = 0,
+  overtime150Hours = 0,
+  overtime200Hours = 0,
+  vacationHolidaySickRate = CCQ_ELECTRICIAN_IC_C3.vacationHolidaySickRate,
+  // null = the rate in force on `date` (owner-editable, « Taux et barèmes »), else the coded one.
+  prelevementRate = null,
+  caisseEducationPerHour = null,
+  date,
+  // CCQ team-leader premium paid this period (dollars): in the 13 % and prélèvement bases.
+  ccqPremiumPay = 0,
+} = {}) {
+  const round2 = (x) => Math.round(x * 100) / 100;
+  prelevementRate = prelevementRate ?? payrollRateOn("ccq_prelevement_rate", date, CCQ_PRELEVEMENT_RATE);
+  caisseEducationPerHour = caisseEducationPerHour ?? payrollRateOn("caisse_education_per_hour", date, CCQ_CAISSE_EDUCATION_PER_HOUR);
+  const h = Math.max(0, Number(hours) || 0);
+  const wage = Number(hourlyWage) || 0;
+  // Prélèvement base = the vacationable wage (base + OT rates + CCQ premium) + the 13 % indemnity.
+  const vacBase = vacationableWage({ hours: h, hourlyWage: wage, overtime150Hours, overtime200Hours }) + (Number(ccqPremiumPay) || 0);
+  const vacation = round2(vacBase * vacationHolidaySickRate);
+  const prelevementCcq = round2(prelevementRate * (vacBase + vacation));
+  // Caisse d'éducation syndicale = worked hours × 0,02 $ (sectoral ICI), same for every union.
+  const caisseEducationSyndicale = round2((Number(caisseEducationPerHour) || 0) * h);
+  return { prelevementCcq, caisseEducationSyndicale };
+}
+
+export const CCQ_UNION_KEYS = Object.keys(CCQ_UNIONS);
+
+// Weekly union dues for a member. `level` is a CCQ_LEVELS key (for flat/apprentice
+// lookups). `date` (YYYY-MM-DD, the pay week) selects the dated rule in force that week;
+// omit it for the current rule. Returns dollars.
+export function computeUnionDues({ union = "ftq_fipoe", level = "journeyman", hourlyWage = 0, hours = 0, date } = {}) {
+  const rule = unionDuesRuleFor(union, date);
+  if (!rule) return 0;
+  const d = rule.dues;
+  const flat = d.flatByLevel?.[level];
+  if (flat != null) return flat; // fixed weekly amount replaces the formula
+  const wage = Number(hourlyWage) || 0;
+  const h = Math.max(0, Number(hours) || 0);
+  const rate = level !== "journeyman" && d.apprenticeRateOfHourlyWage != null
+    ? d.apprenticeRateOfHourlyWage
+    : (d.rateOfHourlyWage || 0);
+  if (d.roundRatePart) {
+    // Printed like the employer's stub: the rate part is rounded to the cent BEFORE the per-hour
+    // part is added (0,55 × 50,79 = 27,93 ; + 0,05 × 34,25 h = 29,64 — not 29,65). Verified on
+    // 23 of 23 real FTQ-FIPOE stubs (S3–S25 2026, two employers); other unions are unverified.
+    const r2 = (x) => Math.round(x * 100) / 100;
+    return r2(r2(rate * wage) + (d.perHour || 0) * h);
+  }
+  return rate * wage + (d.perHour || 0) * h;
+}
+
+// Union dues on a DECLARED hourly rate (the CCQ scale rate). Before 2026-04-26 the stubs split the
+// scale into a fixed 45,36 $/h + 3,00 $/h, so the declared rate there is base + 3 (48,36); the
+// default calculation keeps using the base wage only (a premium above the scale is not declared:
+// D0033-0007, 4,06 $ premium, dues on 50,79). Used by the test mode that reproduces past stubs.
+export function computeUnionDuesAsPrinted({ union = "ftq_fipoe", level = "journeyman", declaredHourlyWage = 0, hours = 0, date } = {}) {
+  return computeUnionDues({ union, level, hourlyWage: declaredHourlyWage, hours, date });
+}
+
+// MÉDIC Construction premiums per worked hour, by pay-week date (CCQ week, Sunday). Both are
+// before the 9 % Québec tax on insurance premiums. Only the employee part is withheld from pay; the
+// employer part is already inside the ACQ grid's "avantages sociaux" (column (8)), not added again.
+//   • 2026-04-26 → 2027-04-24: 0,68 $ salarié / 2,93 $ patronal — CCQ notice of 2026-04-20 (CASIC
+//     decision) keeping the old rates, although the agreement scheduled 0,86 $ / 3,11 $.
+//   • from 2027-04-25: 1,06 $ / 3,31 $ — collective agreement ICI 2025-2029, 27.03 A) 2) (CCQ date;
+//     FIPOE writes April 30). Confirm with the CCQ before that date that the freeze is not extended.
+export const MEDIC_RATES = Object.freeze([
+  Object.freeze({ effectiveFrom: "2026-04-26", effectiveTo: "2027-04-24", employeePerHour: 0.68, employerPerHour: 2.93, source: "CCQ 2026-04-20 (CASIC)" }),
+  Object.freeze({ effectiveFrom: "2027-04-25", effectiveTo: null, employeePerHour: 1.06, employerPerHour: 3.31, source: "Convention ICI 2025-2029, 27.03 A) 2)" }),
+]);
+
+// Québec tax on insurance premiums, applied to the MÉDIC premium. It follows the QST: 9 % until
+// 2026-12-31, then 9,975 % from 2027-01-01 (budget 2025-2026; CCQ notice to employers of 2026-10-28:
+// « aucun changement à la cotisation, mais la taxe sur les cotisations facturées à compter du
+// 1er janvier 2027 »). Applied by pay week like MEDIC_RATES: the pay week that starts on or after
+// 2027-01-01 takes the new rate. The week of Dec 27 – Jan 2 is the construction holiday (no hours worked), so it bills nothing.
+export const MEDIC_TAX_RATES = Object.freeze([
+  Object.freeze({ effectiveFrom: "2000-01-01", effectiveTo: "2026-12-31", rate: 0.09, source: "Taxe sur les primes d'assurance, 9 %" }),
+  Object.freeze({ effectiveFrom: "2027-01-01", effectiveTo: null, rate: 0.09975, source: "CCQ 2026-10-28 (budget Québec 2025-2026)" }),
+]);
+
+// The insurance tax rate in force on `date` (YYYY-MM-DD, the pay week); no date = today.
+export function medicTaxRateOn(date) {
+  const d = String(date || montrealToday()).slice(0, 10);
+  const coded = (MEDIC_TAX_RATES.find((r) => d >= r.effectiveFrom && (!r.effectiveTo || d <= r.effectiveTo)) || MEDIC_TAX_RATES[0]).rate;
+  return payrollRateOn("medic_tax_rate", d, coded);
+}
+
+// The MÉDIC rates in force on `date` (YYYY-MM-DD, the pay week); no date = today. A date before
+// the first window takes the first one (older stubs are reproduced with explicit test rates).
+export function medicRatesOn(date) {
+  const d = String(date || montrealToday()).slice(0, 10);
+  const coded = MEDIC_RATES.find((r) => d >= r.effectiveFrom && (!r.effectiveTo || d <= r.effectiveTo)) || MEDIC_RATES[0];
+  return {
+    ...coded,
+    employeePerHour: payrollRateOn("medic_employee_per_hour", d, coded.employeePerHour),
+    employerPerHour: payrollRateOn("medic_employer_per_hour", d, coded.employerPerHour),
+  };
+}
+
+// Compute the CCQ benefit amounts, engine base adjustments and net withholdings
+// for one period. Dollar amounts (the engine converts to cents).
+//   hours              — total worked hours (regular + overtime hours)
+//   hourlyWage         — base hourly wage for the level (WITHOUT team-leader premium)
+//   employeePensionRate— 0.09 (compagnon) or 0.045 (apprenti)
+// The remaining rates default to the sourced électricien-C3 values but stay
+// overridable so the bench can model another métier/level.
+export function computeCcqBenefits({
+  hours = 0,
+  hourlyWage = 0,
+  overtime150Hours = 0, // temps et demi (for the 13 % indemnity base)
+  overtime200Hours = 0, // temps double
+  employeePensionRate = CCQ_ELECTRICIAN_IC_C3.levels.journeyman.employeePensionRate,
+  taxableBenefitPerHour = CCQ_ELECTRICIAN_IC_C3.taxableBenefitPerHour,
+  vacationHolidaySickRate = CCQ_ELECTRICIAN_IC_C3.vacationHolidaySickRate,
+  // null = the dated rate in force for `date` (MEDIC_RATES).
+  medicEmployeePerHour = null,
+  // null = the dated tax rate in force for `date` (MEDIC_TAX_RATES).
+  medicProvincialTaxRate = null,
+  safetyEquipmentPerHour = CCQ_ELECTRICIAN_IC_C3.safetyEquipmentPerHour,
+  // Hours the safety-equipment allowance is paid on. Defaults to `hours`, but the
+  // caller can pass more: the équipement de sécurité is a per-hour INDEMNITY (like KM),
+  // NOT a social benefit, so it is still paid on return-to-warehouse time that is
+  // otherwise carved out of the "avantages sociaux" (pension/MÉDIC/13%) base.
+  safetyEquipmentHours = null,
+  // null = the sourced rate for `level` (compagnon and apprentis differ).
+  employerSocialBenefitPerHour = null,
+  union = "ftq_fipoe",
+  level = "journeyman",
+  // Pay week (YYYY-MM-DD). Selects the dated union-dues rule and the MÉDIC rate in force that
+  // week; omit for the current ones.
+  date,
+  // Union/professional withholdings that are ALSO federal U1 deductions but whose CCQ
+  // rate/base isn't yet sourced — passed as period amounts (Québec credit, not a base
+  // deduction). See docs/rules/2026-das-payroll.md.
+  prelevementCcq = 0,
+  caisseEducationSyndicale = 0,
+  // Test-only overrides (reproducing a stub issued under another collective agreement):
+  // a stated pension deduction per hour, and a stated union-dues amount for the period.
+  // null = use the sourced formula.
+  pensionDeductionPerHour = null,
+  unionDuesOverride = null,
+  // CCQ team-leader premium paid this period (dollars): added to the 13 % base.
+  ccqPremiumPay = 0,
+} = {}) {
+  const round2 = (x) => Math.round(x * 100) / 100; // to the cent
+  const h = Math.max(0, Number(hours) || 0);
+  const wage = Number(hourlyWage) || 0;
+  // eslint-disable-next-line no-unused-vars -- documented base kept for the pension/other bases
+  const baseWage = h * wage; // straight-time base wage, no premium (pension/other bases)
+
+  // Indemnité de congés (13 %): on the wage earned at base + overtime rates (regular
+  // hours + OT weighted by 1,5× / 2×), premium excluded — matches the talon. With no
+  // overtime this equals baseWage × 13 %.
+  const vacation = round2((vacationableWage({ hours: h, hourlyWage: wage, overtime150Hours, overtime200Hours }) + (Number(ccqPremiumPay) || 0)) * vacationHolidaySickRate);
+  // Avantage imposable MÉDIC (assurance vie + maladie) — the CCQ taxable benefit.
+  const taxableBenefit = round2(h * taxableBenefitPerHour);
+  // Employee pension contribution — on wage + indemnity; reduces taxable income.
+  // The employer (and CCQ) rounds the pensionable hourly base to the cent BEFORE
+  // applying the rate: 50,79 × 1,13 = 57,3927 → 57,39 → × 9 % × 40 h = 206,60 $.
+  // Carrying full precision here lands 1¢ high and shifts the printed taxable bases
+  // (and thus federal tax) by 1-2¢. Matching the per-component rounding reproduces the
+  // stub's printed "gains imposables" (2 386,59 $) and federal tax (259,95 $) exactly.
+  const pensionableHourlyBase = round2(wage * (1 + vacationHolidaySickRate));
+  // The employer rounds the HOURLY pension to the mill (0,001 $/h) and multiplies by the hours:
+  // 57,39 × 9 % = 5,1651 → 5,165 $/h ; 38,25 h × 5,165 = 197,56 (not 197,57 — stub S21). Matches
+  // S19–S25 and D0033-0007 (40 h → 206,60). Computed in integer mills so half-cents stay exact.
+  // Verified for the journeyman rate (9 %) and for stated per-hour amounts; other rates keep the plain
+  // rounding of the total (no stub to verify them).
+  const roundHourlyPension = pensionDeductionPerHour != null || Math.abs(employeePensionRate - 0.09) < 1e-9;
+  const pensionDeduction = roundHourlyPension
+    ? Math.round((Math.round((pensionDeductionPerHour == null
+      ? pensionableHourlyBase * employeePensionRate
+      : Number(pensionDeductionPerHour)) * 1000) * h) / 10) / 100
+    : round2(pensionableHourlyBase * employeePensionRate * h);
+  // MÉDIC premium + provincial insurance tax — net withholding, NOT a tax deduction.
+  // Printed per component, each rounded to the cent: premium 37,5 h × 0,68 = 25,50 and tax
+  // 25,50 × 9 % = 2,295 → 2,30 (stub S17: 25,50 + 2,30 = 27,80, not 27,795).
+  const medicRate = medicEmployeePerHour == null ? medicRatesOn(date).employeePerHour : Number(medicEmployeePerHour) || 0;
+  const medicPremiumCents = Math.round(h * medicRate * 100);
+  const taxRate = medicProvincialTaxRate == null ? medicTaxRateOn(date) : Number(medicProvincialTaxRate) || 0;
+  // 5 decimals: 9,975 % must not be rounded to 9,98 %.
+  const medicTaxCents = Math.round((medicPremiumCents * Math.round(taxRate * 1e5)) / 1e5);
+  const medicWithholding = (medicPremiumCents + medicTaxCents) / 100;
+  // Union dues (per the member's union) — withheld from pay AND a federal income-tax
+  // deduction (U1); a Québec credit (not a base deduction).
+  const unionDues = unionDuesOverride == null
+    ? computeUnionDues({ union, level, hourlyWage: wage, hours: h, date })
+    : Number(unionDuesOverride);
+  // Safety-equipment allowance — a NON-taxable amount paid on top of net (like KM).
+  // Paid on `safetyEquipmentHours` when given (includes return time), else on `hours`.
+  const safetyHours = safetyEquipmentHours == null ? h : Math.max(0, Number(safetyEquipmentHours) || 0);
+  // Printed to the cent: 37,5 h × 0,65 = 24,375 → 24,38 (stub S17).
+  const safetyEquipment = round2(safetyHours * safetyEquipmentPerHour);
+  // Employer avantages-sociaux contribution — imputed gain shown then reversed (a
+  // display wash: not cash, not taxed). Used only for the gross-up presentation.
+  const socialRate = employerSocialBenefitPerHour ?? employerSocialBenefitRateFor(level, date);
+  const employerSocialBenefit = round2(h * socialRate);
+  const prelevement = Number(prelevementCcq) || 0;
+  const caisse = Number(caisseEducationSyndicale) || 0;
+
+  // Québec taxable income: salaire + indemnity + avantage imposable − deductible pension.
+  const taxableQuebec = vacation + taxableBenefit - pensionDeduction;
+
+  return {
+    vacation,
+    taxableBenefit,
+    pensionDeduction,
+    medicWithholding,
+    unionDues,
+    safetyEquipment,
+    employerSocialBenefit,
+    prelevementCcq: prelevement,
+    caisseEducationSyndicale: caisse,
+    // The pension, MÉDIC premium, union dues, prélèvement and caisse are all withheld
+    // from pay, so the caller subtracts this from the engine's (statutory-only) net.
+    netWithholdings: pensionDeduction + medicWithholding + unionDues + prelevement + caisse,
+    // Federal income-tax deductions (T4127 U1): union dues + prélèvement CCQ + caisse
+    // d'éducation. Québec treats them as credits (not base deductions). The caller
+    // passes this to the federal tax profile (annualized).
+    federalDeduction: unionDues + prelevement + caisse,
+    baseAdjustments: {
+      // 13 % indemnity is insurable (EI/RQAP) and pensionable (RRQ).
+      insurableEI: vacation,
+      // RQAP insurable does NOT pick up the MÉDIC taxable benefit: an "avantage
+      // imposable EN NATURE" (the employer's group-insurance contribution) is not
+      // subject to RQAP. Confirmed against Revenu Québec (rémunérations non
+      // assujetties au RQAP) — verified vs WebRAS (which returns 11,15 $ only when the
+      // benefit is wrongly entered as insurable; the sourced value is 10,57 $).
+      insurableRQAP: vacation,
+      // RRQ pensionable DOES pick up the MÉDIC taxable benefit (it is pensionable).
+      pensionable: vacation + taxableBenefit,
+      taxableQuebec,
+      // Federal source-deduction base EXCLUDES the MÉDIC taxable benefit (Québec taxes
+      // it; the CRA does not withhold on it at source → T4A). So the federal base is
+      // the Québec base minus that same avantage imposable = salaire + indemnité −
+      // retraite. Union dues are applied separately as a federal income deduction (U1).
+      taxableFederal: taxableQuebec - taxableBenefit,
+    },
+  };
+}
