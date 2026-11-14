@@ -51,6 +51,14 @@
 > | 4 | **Couche d'authentification séparée** de la logique de pointage (changer de méthode de connexion sans tout refaire) ; passkeys possibles **plus tard**, pas au départ | 10.1 |
 > | 5 | **Les corrections n'écrasent jamais l'original** : piste d'audit prouvée par un test | 10.9 |
 >
+> ## Révision du 2026-11-14 (4) — D4 tranchée : Supabase auto-hébergé sur un serveur au Québec
+>
+> Décision de la propriétaire : on **quitte l'infonuagique de Supabase** et on fait tourner le **logiciel libre Supabase** sur un **serveur situé au Québec**, chez un fournisseur d'infrastructure **canadien**. Raisons : les données ne sont pas
+> chez une société américaine (pas d'exposition au CLOUD Act pour l'hébergement), et **aucune réécriture de l'app** (`supabase-js`, RLS, schéma `supabase/next/`, fonctions Edge restent).
+> Le prix : **nous devenons l'équipe d'exploitation** (sécurité, sauvegardes, mises à jour, pannes). Nouvelle étape **2bis** (infrastructure) avant toute mise en service ; l'étape 11 la **réutilise**.
+> Le **front** (fichiers statiques) peut être hébergé chez Canner (Montréal) ou sur le même serveur. **D4b** (à confirmer) : le côté 1 et le côté 2 sont sur **deux piles séparées** (jamais la même base) ; elles peuvent partager un serveur au tout début, à séparer ensuite.
+> **Plan B** si l'exploitation devient trop lourde : Supabase infonuagique en région canadienne (même schéma, même code, migration par sauvegarde et restauration) — avec l'exposition américaine à documenter dans l'évaluation (Loi 25).
+>
 > **Idées écartées, et pourquoi :** remplacer les fiches par des « sessions de travail » et des pauses (Sparklog n'a pas de boutons de pointage et le domaine est plus large) ; ajouter un UUID en plus du numéro d'employé
 > (la convention prévoit un numéro d'employé ; le numéro aléatoire du côté 2 joue ce rôle, **à confirmer à l'étape 0**) ; supposer un système RH existant (c'est le côté 2) ; imposer les passkeys (support jugé
 > expérimental chez Supabase, **non vérifié**, et charge de soutien pour environ 150 employés).
@@ -97,6 +105,7 @@
 | 0 | Décisions et prérequis (avis juridique, hébergeur, responsable) | 1–2 sem. (attente de tiers) | — | Non |
 | 1 | Squelette du dépôt côté 2 | 2–3 jours | 0 (hébergeur) | Non |
 | 2 | Base de données du côté 2 (schéma, sécurité) | 1 sem. | 1 | Non |
+| 2bis | **Infrastructure : Supabase auto-hébergé sur un serveur québécois** (sécurité, sauvegardes, surveillance, mises à jour) | 2–3 sem. | 0 (hébergeur) | Non |
 | 3 | Contrat d'échange : l'API du côté 1 (dépôt Sparklog) | 1 sem. | 0 | Non |
 | 4 | Synchronisation en lecture (côté 2 lit le côté 1) | 1 sem. | 2, 3 | Non |
 | 5 | Numérotation des employés et table numéro ↔ personne | 3–4 jours | 2, 3 | Non |
@@ -129,8 +138,9 @@ renforcé.**
   4. L'approbation par un gestionnaire peut-elle se faire dans un système distinct du pointage ?
   5. Un gestionnaire peut-il afficher un nom dans son navigateur si le serveur de pointage ne le stocke pas ?
   6. Durée de conservation des fiches de temps et des preuves.
+  7. **Exploitation par nous-mêmes :** si nous faisons tourner le logiciel sur l'infrastructure d'un fournisseur québécois certifié (ISO 27001 / SOC 2 Type 2), l'exigence de **fournisseur certifié** de la convention est-elle satisfaite, ou faut-il que **l'exploitant** du système soit lui-même certifié ? (D4)
 - [ ] **0.2** Nommer la **personne responsable de la protection des renseignements personnels** (obligation Loi 25) et publier ses coordonnées.
-- [ ] **0.3** Choisir l'**hébergeur** de chaque côté **[D4]** : région canadienne, certifications (ISO 27001, SOC 2 Type 2), entente de traitement écrite.
+- [ ] **0.3** **D4 tranchée (2026-11-14) : Supabase auto-hébergé.** Reste à choisir le **fournisseur d'infrastructure** québécois (voir 2bis.1) et à nommer la personne responsable de l'exploitation (2bis.9).
   Vérifier la région disponible chez Supabase **[À VÉRIFIER : région `ca-central-1` (Montréal) ou équivalent]**.
 - [ ] **0.4** Décider **D2** (écran de gestion servi par le côté 2 — *recommandé et supposé par ce plan*) et **D3** (moteur d'heures : copie versionnée avec parité, ou appel du côté 1).
 - [ ] **0.5** Décider **D5** (l'export Google Sheet : retiré ou reproduit côté 2) et **D7** (date de naissance, photo de la carte CCQ : supprimer ou garder côté 2).
@@ -195,6 +205,45 @@ renforcé.**
 **Critère de sortie.** La matrice rôle × table passe ; `\dp` ne montre aucun droit pour `anon` ; les triggers d'audit écrivent.
 
 **Retour arrière.** Chaque migration a son script d'annulation documenté ; base vide à ce stade, on peut la recréer.
+
+---
+
+## Étape 2bis — Infrastructure : Supabase auto-hébergé sur un serveur québécois
+
+**Objectif.** Une pile Supabase qui tourne chez nous, au Québec, sécurisée, sauvegardée et surveillée, **avant** d'y mettre une seule vraie donnée.
+
+> Les points marqués **[À VÉRIFIER]** viennent de la connaissance générale du logiciel et n'ont pas été relus dans sa documentation officielle depuis cette session. Les lire avant d'agir.
+
+**Tâches précises :**
+- [ ] **2bis.1 Fournisseur d'infrastructure.** Serveur privé virtuel ou dédié, **centre de données au Québec**, fournisseur **à propriété canadienne**, certifications ISO 27001 et/ou SOC 2 Type 2 **du fournisseur**, entente écrite (art. 18.3), console hors bande, instantanés (*snapshots*), stockage de sauvegarde **au Québec** distinct du serveur. Comparer au moins deux offres ; ne rien commander avant la réponse à la question 7 de l'étape 0.1.
+- [ ] **2bis.2 Dimensionnement.** Point de départ (estimation à valider par un essai de charge, pas une garantie) : 4 vCPU, 8 Go de mémoire, 100 Go de disque SSD pour environ 150 employés avec photos de courte durée. Prévoir la croissance du stockage des photos (durée de conservation réglable : 30 jours par défaut).
+- [ ] **2bis.3 Installation.** Docker Compose du projet Supabase, **versions épinglées** (jamais `latest`), **tous** les secrets de l'exemple remplacés : mot de passe Postgres, secret JWT, clés `anon` et `service_role` (dérivées du secret JWT), clé de chiffrement du coffre, mots de passe de l'interface d'administration. Secrets dans un gestionnaire de mots de passe d'équipe (copie de secours hors serveur), **jamais dans un dépôt**. **[À VÉRIFIER]** le paquet `docker/` officiel et son `.env.example`.
+- [ ] **2bis.4 Durcissement.** Pare-feu : seuls 443 (et SSH par clés, depuis des adresses autorisées) ouverts ; Postgres, l'interface d'administration (Studio) et les services internes **jamais exposés** à Internet ; reverse proxy avec TLS automatique ; SSH par clés seulement, pas de connexion root ; mises à jour de sécurité du système automatiques ; limitation des essais de connexion ; journaux sans donnée personnelle. **Télémétrie :** vérifier et désactiver tout envoi vers l'extérieur du paquet **[À VÉRIFIER]** ; test réseau qui liste les hôtes sortants du serveur.
+- [ ] **2bis.5 Sauvegardes.** Sauvegarde logique quotidienne **et** archivage continu pour restaurer à un instant précis (outil à choisir : `pgBackRest` ou équivalent) vers un stockage **au Québec, hors du serveur**, chiffré ; sauvegarde du stockage d'objets (photos) ; rétention écrite ; **restauration complète testée** sur un serveur neuf, avec le temps mesuré.
+- [ ] **2bis.6 Surveillance.** Sonde externe (le site répond), espace disque, mémoire, expiration du certificat, dernière sauvegarde réussie, erreurs des services ; alertes à la propriétaire **et** à la personne d'exploitation (2bis.9), **sans** donnée personnelle dans les messages.
+- [ ] **2bis.7 Mises à jour.** Calendrier écrit : système chaque mois, pile Supabase chaque trimestre (ou plus tôt pour une faille de sécurité) ; chaque mise à jour **d'abord** sur la pile d'essai ; retour arrière par instantané.
+- [ ] **2bis.8 Deux environnements.** Production et **essai** (mêmes versions, données **fictives** seulement). Le côté 2 est sur une **pile séparée** (D4b) ; jamais de base partagée.
+- [ ] **2bis.9 Personne responsable de l'exploitation** nommée (employé, prestataire ou contrat de soutien), avec un **runbook** : panne, restauration, rotation des secrets, incident de sécurité (lien avec 14.3), renouvellement du certificat, remplacement du serveur. **Pas de mise en production sans cette personne.**
+- [ ] **2bis.10 Fonctions Edge et tâches planifiées.** Vérifier que `classify_week`, `process_*`, `cleanup_overtime_evidence`, `delete_inventory_screenshots`, `send_push`, `infra_metrics` tournent dans l'environnement d'exécution inclus **[À VÉRIFIER]** ; planifier les tâches (extension `pg_cron` de l'image Postgres, ou un cron système qui appelle une fonction) **[À VÉRIFIER]**.
+- [ ] **2bis.11 Stockage des photos.** Volume local du serveur, ou stockage compatible S3 au Québec **[À VÉRIFIER]** ; dans les deux cas, règles d'accès équivalentes à celles de Sparklog (aucune lecture par un employé des photos d'un autre).
+- [ ] **2bis.12 Front.** Fichiers statiques hébergés chez Canner (Montréal) ou sur le même serveur ; variables `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` propres à chaque environnement.
+- [ ] **2bis.13 Évaluation des risques de l'exploitation propre** (à joindre à l'évaluation Loi 25) : ce qu'on gagne (pas de société américaine, données au Québec) et ce qu'on prend en charge (sécurité, disponibilité, personne clé).
+
+**Livrable testable.**
+1. `scripts/test-next-schema.sh` rejoué **sur la pile d'essai réelle** (pas seulement la base jetable locale) : les migrations 0001 à 0004 s'appliquent et leurs tests passent.
+2. Restauration complète depuis une sauvegarde sur un serveur neuf, **temps mesuré et noté** (objectif à fixer avec la propriétaire).
+3. Balayage de ports depuis l'extérieur : seuls 443 (et SSH depuis les adresses autorisées) répondent.
+4. Une mise à jour de la pile réussie sur l'essai, avec retour arrière essayé.
+
+**Critère de sortie.** Les quatre livrables passent, la personne responsable (2bis.9) a signé le runbook, et la réponse à la question 7 de l'étape 0.1 est reçue.
+
+**Risques et parades.**
+- *Panne ou mauvaise manipulation sans personne pour réparer* → 2bis.9, sondes, instantanés avant chaque changement.
+- *Faille non corrigée* → mises à jour planifiées, pare-feu strict, rien d'exposé sauf 443.
+- *Perte de données* → sauvegardes hors serveur et **restauration réellement testée**.
+- *Charge de travail trop lourde* → **plan B** : Supabase infonuagique en région canadienne, sans changement de code.
+
+**Retour arrière.** Détruire la pile d'essai ; rien n'est en production à ce stade.
 
 ---
 
@@ -498,12 +547,12 @@ Livrable : tests de rejeu (un code ne marche qu'une fois), d'expiration, de bloc
 
 ---
 
-## Étape 11 — Hébergement du côté 1 au Québec
+## Étape 11 — Mise en service du côté 1 sur l'infrastructure québécoise (2bis)
 
 **Objectif.** Les fiches de temps (côté 1) sont hébergées au Québec (exigence C-hébergement, OFFICIEL 6.2).
 
 **Tâches précises :**
-- [ ] **11.1** Nouveau projet de base de données dans la région choisie (étape 0.3) ; mêmes migrations rejouées dans l'ordre ; extensions identiques ; secrets Edge recréés.
+- [ ] **11.1** Utiliser la **pile de production** préparée à l'étape 2bis (Supabase auto-hébergé, Québec) ; mêmes migrations rejouées dans l'ordre ; extensions identiques ; secrets des fonctions recréés ; **rien ne se met en production avant que les critères de sortie de 2bis soient atteints**.
 - [ ] **11.2** Copie des données (fiches, preuves, inventaire) par agrégats vérifiés ; copie des **objets** de stockage (preuves de temps supp., reçus, captures d'inventaire) ; recalcul des chemins si nécessaire.
 - [ ] **11.3** Jetons d'accès : les comptes factices se recréent avec un code d'activation (9.4) **ou** la table `auth.users` est migrée avec ses condensats (selon la capacité de l'hébergeur ; vérifier avant de promettre).
 - [ ] **11.4** Variables d'environnement du front (`VITE_SUPABASE_URL`, clé publique) changent à la bascule ; la PWA se met à jour (`UpdateBanner`) ; les anciens abonnements push sont recréés.
@@ -606,6 +655,7 @@ Livrable : tests de rejeu (un code ne marche qu'une fois), d'expiration, de bloc
 - La **région canadienne** disponible chez l'hébergeur et la possibilité de **migrer `auth.users` avec les condensats** (étape 11.3).
 - La façon de déplacer les **secrets du coffre** (NAS) entre projets (étape 7.3).
 - (Tranché le 2026-11-14 : temps libre et notes de gestionnaires → côté 2 ; groupes / entrepôts → côté 1, par numéro, gérés par l'API.)
+- **Exploitation propre (D4) :** si l'exigence de fournisseur certifié de la convention vise l'hébergeur de l'infrastructure ou l'exploitant du système (question 7, étape 0.1) ; si le paquet auto-hébergé envoie de la télémétrie ou fait des appels sortants ; la disponibilité de `pg_cron`, de l'environnement d'exécution des fonctions et du stockage S3 dans la pile auto-hébergée ; les ressources réellement nécessaires.
 - Ce que l'**hébergeur garde dans ses propres journaux** (IP, appareils, durée) et ce qu'on peut en réduire (3.6).
 - L'état du **support des passkeys** chez l'hébergeur (jugé expérimental dans une source externe, non vérifié ici).
 - Si la **convention** accepte le numéro d'employé tel quel comme identifiant (hypothèse de ce plan) ou exige une couche d'identifiant technique de plus : question 2 de l'étape 0.1.

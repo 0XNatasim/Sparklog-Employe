@@ -32,6 +32,8 @@ On construit **strictement** deux dépôts, versions « en deux côtés » de Sp
 
 Le plan d'exécution détaillé est dans **`PLAN.md`** (identique dans les deux dépôts).
 
+**Hébergement (D4, tranchée le 2026-11-14) :** Supabase **auto-hébergé** sur un **serveur au Québec**, chez un fournisseur d'infrastructure canadien (section 11 et `PLAN.md`, étape 2bis). Le logiciel est libre et les données ne sont pas chez une société américaine, mais **l'exploitation (sécurité, sauvegardes, mises à jour, pannes) devient notre responsabilité** : une personne responsable doit être nommée avant toute mise en production.
+
 **Conséquences :**
 - Les écarts E1–E14 qui touchaient « le côté 1 » se règlent dans **`Sparklog-Employés`**, qui est un **nouveau** dépôt avec une **nouvelle** base : pas de migration d'hébergement, pas de colonnes nominatives à retirer (on ne les copie pas).
 - Rien n'est cassé en production tant que la bascule (P3, étape 13 de `PLAN.md`) n'est pas faite : **Sparklog continue de tourner tel quel** pendant la construction.
@@ -409,7 +411,7 @@ doit **commencer** par ce critère.
 1. **D1** Sparklog est-il traité comme application de pointage (hypothèse de ce plan) ? → avis P0.
 2. **D2** Noms à l'écran des gestionnaires : option (a) écrans servis par le côté 2, ou (b) numéros côté 1 + noms chargés du côté 2.
 3. **D3** Partage du moteur d'heures : le côté 2 appelle le côté 1, ou copie versionnée.
-4. **D4** Fournisseur d'hébergement du côté 1 et du côté 2 (un seul ou deux), selon les certifications.
+4. **D4** — **TRANCHÉE le 2026-11-14 : Supabase auto-hébergé sur un serveur au Québec**, chez un fournisseur d'infrastructure canadien (aucune réécriture de l'app ; nous exploitons la pile nous-mêmes). **D4b** (à confirmer) : côté 1 et côté 2 sur deux piles séparées. Plan B : Supabase infonuagique en région canadienne. Conditions : fournisseur d'infrastructure certifié (ISO 27001 / SOC 2 Type 2), personne responsable de l'exploitation nommée, et réponse à la question « exploitant certifié ? » (`PLAN.md` 0.1, question 7). Voir `PLAN.md`, étape 2bis.
 5. **D5** Avenir de l'export Google : retiré, ou reproduit côté 2.
 6. **D6** Durée de conservation des fiches de temps (selon R-20 / paie) et des preuves en photo.
 7. **D7** Sort des données qui n'ont pas de raison d'être (date de naissance, photo de la carte CCQ) : supprimer ou garder côté 2.
