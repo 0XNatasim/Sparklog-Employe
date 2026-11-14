@@ -30,3 +30,9 @@ for f in "$ROOT"/supabase/next/[0-9]*.sql; do
   t="$ROOT/supabase/next/test-$n.sql"
   if [ -f "$t" ]; then echo "-- test-$n.sql"; $PSQL -f "$t"; fi
 done
+# Relevé de la structure obtenue (pour scripts/check-app-against-schema.mjs) : DUMP_SCHEMA=/chemin/schema.json scripts/test-next-schema.sh
+if [ -n "${DUMP_SCHEMA:-}" ]; then
+  $PSQL -At -c "select jsonb_build_object(
+    'columns', (select jsonb_object_agg(table_name, cols) from (select table_name, jsonb_agg(column_name order by ordinal_position) cols from information_schema.columns where table_schema = 'public' group by table_name) t),
+    'functions', (select coalesce(jsonb_agg(distinct proname), '[]') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'))" > "$DUMP_SCHEMA"
+fi
