@@ -198,14 +198,13 @@ export default function EmergencyTimesheet() {
     setError("");
     setInfo("");
     try {
-      const { data, error: rpcError } = await withTimeout(
-        supabase.rpc("remind_manager_entry", { p_job_id: entry.id }).single(),
+      const { error: rpcError } = await withTimeout(
+        supabase.rpc("remind_manager_entry", { p_job_id: entry.id }),
         12000
       );
       if (rpcError) throw rpcError;
-      const push = data?.broadcast_id ? pushOutcome(await notifyBroadcastPush(data.broadcast_id)) : null;
-      const reminded = t("emergency.reminded", { name: nameById.get(entry.user_id) || "" });
-      setInfo(push?.tone === "warning" ? `${reminded} ${t(push.key, push.params)}` : reminded);
+      // Le rappel est un avis à l'employé (`employee_notices`, 0013) ; la notification téléphone générique viendra de `send_push` (0010).
+      setInfo(t("emergency.reminded", { name: nameById.get(entry.user_id) || "" }));
       await loadEntries().catch(() => undefined);
     } catch (remindError) {
       setError(friendlyErrorMessage(remindError, t, "emergency.errors.remind"));

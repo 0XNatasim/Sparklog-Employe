@@ -1,6 +1,6 @@
 # Écarts entre l'application (`src/`) et le schéma neuf (`supabase/next/`)
 
-Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh && node scripts/check-app-against-schema.mjs /tmp/schema.json` (analyse statique approximative : `.from()` + select / filtres / écritures, et `.rpc()`). État au **V0.17.0 : 29 écarts**. Objectif : 0, puis ajouter ce contrôle à la CI (il demande PostgreSQL 16).
+Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh && node scripts/check-app-against-schema.mjs /tmp/schema.json` (analyse statique approximative : `.from()` + select / filtres / écritures, et `.rpc()`). État au **V0.18.0 : 22 écarts** (29 en V0.17.0 ; le groupe C est porté par la migration 0013, `get_infra_stats` abandonné). Objectif : 0, puis ajouter ce contrôle à la CI (il demande PostgreSQL 16).
 
 ## A. À retirer du côté 1 (données du côté 2 ou nominatives)
 | Écart | Où | Pourquoi |
@@ -18,7 +18,7 @@ Relevé automatique : `DUMP_SCHEMA=/tmp/schema.json scripts/test-next-schema.sh 
 | `foreman_reports.audited_name` (texte libre) | `audited_employee_number` (numéro) — saisie par numéro |
 | `broadcast_recipients`, `manager_broadcasts` | `announcement_recipients`, `announcements` (0011 ; `employee_id`, `acknowledged_at` une seule fois) |
 
-## C. Fonctions côté 1 absentes du schéma neuf (décision à prendre : porter dans une migration 0013+, ou retirer)
+## C. Fonctions côté 1 — FAIT en V0.18.0 (migration 0013 ; `get_infra_stats` abandonné)
 | Écart | Rôle dans l'app | Recommandation |
 |---|---|---|
 | `job_entry_sources` (table) | étoile rouge « saisie manuelle » (OCR ou à la main) | porter (petite table, RLS par employé) |

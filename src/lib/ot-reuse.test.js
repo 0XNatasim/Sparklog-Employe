@@ -10,14 +10,14 @@ const jobs = [
   { id: "j3", user_id: A, job_date: "2026-10-20", status: "approved", ot: "191379", depart: "08:00:00", fin: "09:00:00" },
 ];
 const rows = [
-  { job_id: "j1", other_job_id: "x1", other_user_id: B, other_name: "Patrick Grandbois", other_date: "2026-10-14", other_depart: "08:47:00", other_fin: "09:10:00", other_status: "submitted" },
-  { job_id: "j1", other_job_id: "x2", other_user_id: A, other_name: "Patrick Donais", other_date: "2026-10-02", other_depart: "10:00:00", other_fin: "11:00:00", other_status: "approved" },
+  { job_id: "j1", other_job_id: "x1", other_user_id: B, other_employee_number: 1002, other_date: "2026-10-14", other_depart: "08:47:00", other_fin: "09:10:00", other_status: "submitted" },
+  { job_id: "j1", other_job_id: "x2", other_user_id: A, other_employee_number: 1001, other_date: "2026-10-02", other_depart: "10:00:00", other_fin: "11:00:00", other_status: "approved" },
   // Exact same entry (same employee, day and times): left to the « duplicate » anomaly.
-  { job_id: "j2", other_job_id: "x3", other_user_id: A, other_name: "Patrick Donais", other_date: "2026-10-19", other_depart: "09:00:00", other_fin: "10:15:00", other_status: "submitted" },
+  { job_id: "j2", other_job_id: "x3", other_user_id: A, other_employee_number: 1001, other_date: "2026-10-19", other_depart: "09:00:00", other_fin: "10:15:00", other_status: "submitted" },
   // A job that is not submitted any more is not flagged.
-  { job_id: "j3", other_job_id: "x4", other_user_id: B, other_name: "Tianyi Zhang", other_date: "2026-10-16", other_depart: "09:52:00", other_fin: "12:45:00", other_status: "submitted" },
+  { job_id: "j3", other_job_id: "x4", other_user_id: B, other_employee_number: 1003, other_date: "2026-10-16", other_depart: "09:52:00", other_fin: "12:45:00", other_status: "submitted" },
   // Unknown job id (not on screen) is ignored.
-  { job_id: "zz", other_job_id: "x5", other_user_id: B, other_name: "?", other_date: "2026-10-16", other_depart: null, other_fin: null, other_status: "saved" },
+  { job_id: "zz", other_job_id: "x5", other_user_id: B, other_employee_number: null, other_date: "2026-10-16", other_depart: null, other_fin: null, other_status: "saved" },
 ];
 
 describe("« OT déjà utilisé » anomaly (0108)", () => {
@@ -26,8 +26,8 @@ describe("« OT déjà utilisé » anomaly (0108)", () => {
     expect(anomalies).toHaveLength(1);
     expect(anomalies[0]).toMatchObject({ key: "ot_reused:j1", type: "ot_reused", userId: A, jobDate: "2026-10-19", jobIds: ["j1"], ot: "200451" });
     expect(anomalies[0].others).toEqual([
-      { jobId: "x1", userId: B, name: "Patrick Grandbois", date: "2026-10-14", status: "submitted" },
-      { jobId: "x2", userId: A, name: "Patrick Donais", date: "2026-10-02", status: "approved" },
+      { jobId: "x1", userId: B, name: "#1002", date: "2026-10-14", status: "submitted" },
+      { jobId: "x2", userId: A, name: "#1001", date: "2026-10-02", status: "approved" },
     ]);
   });
 
@@ -36,11 +36,11 @@ describe("« OT déjà utilisé » anomaly (0108)", () => {
     expect(otReuseAnomalies(split, jobs).map((a) => a.key)).toEqual(["ot_reused:j2"]);
   });
 
-  it("writes the other jobs as name · date (status), at most three then +N", () => {
+  it("writes the other jobs as number · date (status), at most three then +N", () => {
     const t = (key) => ({ "status.submitted": "soumis", "status.approved": "approuvé" })[key] || key;
     const formatDate = (d) => d.slice(5);
     const others = otReuseAnomalies(rows, jobs)[0].others;
-    expect(otReuseOthersText(others, { t, formatDate })).toBe("Patrick Grandbois · 10-14 (soumis) ; Patrick Donais · 10-02 (approuvé)");
+    expect(otReuseOthersText(others, { t, formatDate })).toBe("#1002 · 10-14 (soumis) ; #1001 · 10-02 (approuvé)");
     const many = [...others, ...others];
     expect(otReuseOthersText(many, { t, formatDate })).toMatch(/ ; \+1$/);
   });

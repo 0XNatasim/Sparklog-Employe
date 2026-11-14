@@ -184,9 +184,6 @@ export default function AuditLog() {
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${meta.tone}`} />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm">{describe(row)}</div>
-                  {row.action === "file_read_error" && row.details?.browser && (
-                    <div className="mt-0.5 break-all font-mono text-xs text-muted-foreground">{row.details.browser}</div>
-                  )}
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {t("audit.byLine", { actor: row.actor_name || t("audit.someone") })} · {dayjs(row.created_at).format("DD MMM YYYY, HH:mm")}
                   </div>

@@ -129,7 +129,7 @@ export function otReuseAnomalies(rows, jobs) {
     const other = { id: row.other_job_id, user_id: row.other_user_id, job_date: row.other_date, ot: job.ot, depart: row.other_depart, fin: row.other_fin };
     if (other.user_id === job.user_id && String(other.job_date) === String(job.job_date) && sameEntry(job, other)) continue;
     if (!byJob.has(job.id)) byJob.set(job.id, { job, others: [] });
-    byJob.get(job.id).others.push({ jobId: row.other_job_id, userId: row.other_user_id, name: row.other_name || "", date: String(row.other_date).slice(0, 10), status: row.other_status });
+    byJob.get(job.id).others.push({ jobId: row.other_job_id, userId: row.other_user_id, name: Number.isInteger(row.other_employee_number) ? `#${row.other_employee_number}` : "", date: String(row.other_date).slice(0, 10), status: row.other_status });
   }
   return [...byJob.values()].map(({ job, others }) => ({
     key: `ot_reused:${job.id}`,
@@ -142,7 +142,7 @@ export function otReuseAnomalies(rows, jobs) {
   }));
 }
 
-// « Patrick D. · 19 oct. (soumis) ; … » for the anomaly line; at most `max` other jobs, then « +N ».
+// « #1001 · 19 oct. (soumis) ; … » for the anomaly line; at most `max` other jobs, then « +N ».
 export function otReuseOthersText(others, { t, formatDate, max = 3 }) {
   const list = (others || []).slice(0, max).map((o) => `${o.name || "?"} · ${formatDate(o.date)} (${t(`status.${o.status}`)})`);
   if ((others || []).length > max) list.push(`+${others.length - max}`);

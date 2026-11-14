@@ -14,7 +14,8 @@ const isInstalled = () => {
 export function reportFileReadError(context, file, error) {
   if (!file || !isFileFailure(error)) return;
   try {
-    const details = fileDiagnostics(file, error, { installed: isInstalled() });
+    // Ni navigateur ni mode d'installation : le serveur ne conserve aucun appareil (0013).
+    const { browser: _browser, app: _app, ...details } = fileDiagnostics(file, error, { installed: isInstalled() });
     Promise.resolve(supabase.rpc("log_file_read_error", { p_context: context, p_details: details }))
       .then((result) => { if (result?.error) console.warn("[file-read-report]", result.error); })
       .catch((reportError) => console.warn("[file-read-report]", reportError));

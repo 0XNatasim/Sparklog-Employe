@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.17.0
+# Sparklog-Employés (côté 1 : pointage) — V0.18.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.17.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.18.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -54,3 +54,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.16.0 :** l'application n'affiche ni ne lit plus aucune donnée nominative (invariant I1). `AuthProvider` fournit `employeeNumber` (plus `fullName`) ; `Profile.jsx` ne montre que le numéro ; les écrans de gestion (En direct, Boîte à faire, Paie de la semaine → `WeekSnapshot`, Inventaire, Feuille d'urgence, Notes, Journal d'activité, Justificatifs…) identifient chaque employé par `employeeLabel()` (`#1042`, `src/lib/employee-label.js`) ; les lectures de `profiles` ne demandent plus nom, courriel, téléphone, région, syndicat ni carte CCQ ; retirés : `RegionOnboarding`, `CcqCardCapture`, `ReferenceContent`, `reference-blocks`, `ccq-card`, `ccq-regions`, `union-associations`. Garde-fou : `src/lib/no-personal-data.test.js` lit le code et échoue si une colonne nominative revient.
 
 **V0.17.0 :** outil de contrôle `scripts/check-app-against-schema.mjs` (compare les tables, colonnes et fonctions que l'app appelle à la structure de `supabase/next/`, relevée par `DUMP_SCHEMA=… scripts/test-next-schema.sh`) ; premier relevé : 29 écarts, triés dans `docs/ecarts-app-schema.md` (A à retirer, B à adapter, C à porter ou retirer). Aucun changement d'application.
+
+**V0.18.0 :** `supabase/next/0013_manager_tools` : source de saisie (`job_entry_sources`, étoile « saisie manuelle »), compteurs `manager_job_counts`, `ot_reuse_for_jobs` (renvoie le numéro de l'autre employé), `evidence_download_alert`, diagnostic de lecture de photo (`file_read_errors` + `log_file_read_error`, sans navigateur ni appareil), feuille d'urgence (`delete_manager_entry`, `remind_manager_entry` par avis à l'employé), avec test SQL et 11 mutations vérifiées. « État du service » abandonné. App : `job-anomalies` lit `other_employee_number`, `file-read-report` n'envoie plus navigateur ni mode d'installation, le rappel de la feuille d'urgence n'envoie plus d'annonce. Écarts app ↔ schéma : 29 → 22.
