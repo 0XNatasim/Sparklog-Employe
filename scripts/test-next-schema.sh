@@ -11,11 +11,22 @@ su postgres -c "$BIN/pg_ctl -D $DIR/data -o '-p $PORT -k $DIR' -w -l $DIR/log st
 PSQL="psql -X -q -v ON_ERROR_STOP=1 -h $DIR -p $PORT -U postgres -d postgres"
 $PSQL <<'SQL'
 create role anon nologin; create role authenticated nologin; create role service_role nologin;
-create schema auth; create schema extensions;
+create schema auth; create schema extensions; create schema storage;
 create table auth.users (id uuid primary key, email text);
 create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
 create function auth.uid() returns uuid language sql stable as $$ select nullif(auth.jwt() ->> 'sub', '')::uuid $$;
-grant usage on schema public, auth, extensions to anon, authenticated, service_role;
+create table storage.buckets (id text primary key, name text, public boolean default false, file_size_limit bigint, allowed_mime_types text[], created_at timestamptz default now());
+create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid, owner_id text, created_at timestamptz default now(), updated_at timestamptz default now(), metadata jsonb);
+alter table storage.objects enable row level security;
+create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name, '/') $$;
+grant usage on schema public, auth, extensions, storage to anon, authenticated, service_role;
+grant select, insert on storage.objects to authenticated;
 SQL
-for f in "$ROOT"/supabase/next/[0-9]*.sql; do echo "-- $(basename "$f")"; $PSQL -f "$f"; done
-for t in "$ROOT"/supabase/next/test-*.sql; do echo "-- $(basename "$t")"; $PSQL -f "$t"; done
+# Chaque migration est appliquée puis son test est lancé AVANT la suivante : un test décrit l'état de sa propre migration
+# (une migration ultérieure peut remplacer une fonction, ce que son propre test vérifie).
+for f in "$ROOT"/supabase/next/[0-9]*.sql; do
+  n=$(basename "$f" | cut -c1-4)
+  echo "-- $(basename "$f")"; $PSQL -f "$f"
+  t="$ROOT/supabase/next/test-$n.sql"
+  if [ -f "$t" ]; then echo "-- test-$n.sql"; $PSQL -f "$t"; fi
+done
