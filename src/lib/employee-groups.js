@@ -5,6 +5,7 @@
 import { supabase } from "@/supabaseClient";
 import { DEPARTURE_STATUSES, isNewHire } from "@/lib/signups";
 import { withTimeout } from "@/lib/utils";
+import { employeeLabel } from "@/lib/employee-label";
 
 export const MAX_GROUP_NAME = 60;
 export const MAX_GROUP_NOTE = 300;
@@ -59,7 +60,7 @@ export function groupMembers(group, profiles) {
   return (group?.memberIds || [])
     .map((id) => byId.get(id))
     .filter(Boolean)
-    .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || "", "fr-CA", { sensitivity: "base" }));
+    .sort((a, b) => (employeeLabel(a) || "").localeCompare(employeeLabel(b) || "", "fr-CA", { sensitivity: "base" }));
 }
 
 // Field people who should belong to a group (warehouse) but are in none: crew and subcontractors (not
@@ -71,7 +72,7 @@ export function ungroupedPeople(groups, people, today) {
   return (people || [])
     .filter((person) => FIELD_ROLES.has(person.role || "employee") && !grouped.has(person.id))
     .filter((person) => isNewHire(person, today) || (!person.is_paused && !DEPARTURE_STATUSES.includes(person.departure_status)))
-    .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || "", "fr-CA", { sensitivity: "base" }));
+    .sort((a, b) => (employeeLabel(a) || "").localeCompare(employeeLabel(b) || "", "fr-CA", { sensitivity: "base" }));
 }
 
 // What to write when a group's members change from `before` to `after` (ids).

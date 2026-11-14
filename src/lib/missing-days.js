@@ -16,7 +16,7 @@ async function fetchAll(makeQuery) {
   }
 }
 
-// employees = profiles (id, full_name, email, role, is_paused, show_on_boards, start_date).
+// employees = profiles (id, employee_number, role, is_paused, show_on_boards, start_date).
 export async function loadMissingEntryDays({ employees, startDate, endDate }) {
   const ids = employees.map((e) => e.id);
   const from = startDate < MISSING_ENTRY_TRACKING_START ? MISSING_ENTRY_TRACKING_START : startDate;

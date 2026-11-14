@@ -14,6 +14,7 @@ import { isOffOn, isExceptionOn } from "@/lib/timeoff";
 import { useT } from "@/lib/use-t";
 import { companyDate } from "@/lib/company-time";
 import { activePeopleOnLeave, dayStatus, liveRoster, notSubmittedYesterday } from "@/lib/live-crew";
+import { employeeLabel } from "@/lib/employee-label";
 
 const REFRESH_MS = 30000;
 
@@ -27,7 +28,7 @@ async function fetchLiveCrew(targetDate) {
   const today = targetDate || montrealDate();
   const yesterday = dayjs(today).subtract(1, "day").format("YYYY-MM-DD");
   const [{ data: people }, { data: jobs }, { data: timeOff }, { data: yJobs }, holidays] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email, role, is_paused, show_on_boards, start_date").order("full_name"),
+    supabase.from("profiles").select("id, employee_number, role, is_paused, start_date").order("employee_number"),
     supabase.from("jobs").select("id, user_id, ot, status, depart, fin, job_date, updated_at, overtime_evidence_captured").eq("job_date", today),
     supabase.from("employee_time_off").select("user_id, kind, start_date, end_date, start_time, weekdays, exception_dates").lte("start_date", today).or(`end_date.gte.${yesterday},end_date.is.null`),
     supabase.from("jobs").select("user_id, status").eq("job_date", yesterday),
@@ -57,7 +58,7 @@ async function fetchLiveCrew(targetDate) {
   // Nothing was due on a weekend or a CCQ holiday (company_holidays): nobody is "not submitted".
   const notSubmittedList = isNonWorkday(yesterday, holidays) ? [] :
     notSubmittedYesterday(people, { yesterdayJobs: yJobs || [], offUserIds: offYesterday, date: yesterday })
-      .map((p) => ({ id: p.id, name: p.full_name || p.email || p.id }));
+      .map((p) => ({ id: p.id, name: employeeLabel(p) || p.id }));
   const map = new Map();
   (jobs || []).forEach((job) => {
     if (!map.has(job.user_id)) map.set(job.user_id, []);
@@ -246,7 +247,7 @@ export default function LiveCrew({ onSelectEmployee, targetDate = "", snapshot =
                         status === "none" && "text-destructive",
                       )}
                     >
-                      {employee.full_name || employee.email}
+                      {employeeLabel(employee)}
                     </button>
                     {overtime && (
                       <span

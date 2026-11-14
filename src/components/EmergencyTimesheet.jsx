@@ -27,6 +27,7 @@ import { formatHM, hoursBetween } from "@/lib/time";
 import { useT } from "@/lib/use-t";
 import { extractWorkOrderText, parseExtractedText } from "@/lib/work-order-ocr";
 import { withRetry, withTimeout } from "@/lib/utils";
+import { employeeLabel } from "@/lib/employee-label";
 
 const ELIGIBLE_ROLES = ["employee", "foreman", "admin", "subcontractor_1"];
 const EMPTY_FORM = { employeeId: "", jobDate: "", ot: "", depart: "", arrivee: "", fin: "", km: "", note: "", departFold: null, finFold: null, submit: false };
@@ -61,7 +62,7 @@ export default function EmergencyTimesheet() {
   const errors = validateManagerEntry(form);
   // Night of the fall time change (0116): départ / fin in the 1:00-1:59 that happens twice.
   const repeated = repeatedHourFields(form);
-  const nameById = useMemo(() => new Map(people.map((p) => [p.id, p.full_name])), [people]);
+  const nameById = useMemo(() => new Map(people.map((p) => [p.id, employeeLabel(p)])), [people]);
   // Submitting for the employee also works for someone already paused (left the company); a draft does not.
   const activePeople = useMemo(() => people.filter((p) => form.submit || !p.is_paused), [people, form.submit]);
   const totalLabel = useMemo(() => {
@@ -89,8 +90,8 @@ export default function EmergencyTimesheet() {
       try {
         const [{ data: profiles, error: profileError }] = await Promise.all([
           withTimeout(
-            supabase.from("profiles").select("id, full_name, role, is_paused")
-              .in("role", ELIGIBLE_ROLES).order("full_name").limit(QUERY_BUDGETS.emergencyEmployees),
+            supabase.from("profiles").select("id, employee_number, role, is_paused")
+              .in("role", ELIGIBLE_ROLES).order("employee_number").limit(QUERY_BUDGETS.emergencyEmployees),
             12000
           ),
           loadEntries(),
@@ -288,7 +289,7 @@ export default function EmergencyTimesheet() {
               <Select id="em-employee" value={form.employeeId} onChange={setField("employeeId")} disabled={busy} aria-invalid={invalid("employee")}
                 className={invalid("employee") ? "border-destructive" : ""}>
                 <option value="">{t("emergency.employeePlaceholder")}</option>
-                {activePeople.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+                {activePeople.map((person) => <option key={person.id} value={person.id}>{employeeLabel(person)}</option>)}
               </Select>
             </div>
             <div className="grid gap-1.5">

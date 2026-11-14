@@ -33,7 +33,7 @@ describe("filterReceiptJobs", () => {
   });
 
   it("lists the employees of the jobs by name", () => {
-    const profiles = new Map([["u1", { full_name: "Zoé" }], ["u2", { email: "alex@x.ca" }]]);
-    expect(receiptEmployees(jobs, profiles)).toEqual([{ id: "u2", name: "alex@x.ca" }, { id: "u1", name: "Zoé" }]);
+    const profiles = new Map([["u1", { employee_number: 1001 }], ["u2", { employee_number: 1002 }]]);
+    expect(receiptEmployees(jobs, profiles)).toEqual([{ id: "u1", name: "#1001" }, { id: "u2", name: "#1002" }]);
   });
 });

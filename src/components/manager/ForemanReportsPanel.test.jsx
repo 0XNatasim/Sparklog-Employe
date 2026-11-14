@@ -19,7 +19,7 @@ const report = (extra = {}) => ({
 });
 
 function setup(reports) {
-  state.fake = createFakeSupabase({ tables: { foreman_reports: reports, profiles: [{ id: "f1", full_name: "Éric Foreman" }] } });
+  state.fake = createFakeSupabase({ tables: { foreman_reports: reports, profiles: [{ id: "f1", employee_number: 1001 }] } });
   return render(<ForemanReportsPanel />);
 }
 
@@ -30,7 +30,7 @@ describe("ForemanReportsPanel", () => {
     setup([report()]);
     expect(await screen.findByText("Casque oublié")).toBeTruthy();
     expect(screen.getByText("CONTREMAÎTRE")).toBeTruthy();
-    expect(screen.getByText("Éric Foreman")).toBeTruthy();
+    expect(screen.getByText("#1001")).toBeTruthy();
     expect(screen.getByRole("button", { name: fr("foremanNotes.export") })).toBeTruthy();
   });
 

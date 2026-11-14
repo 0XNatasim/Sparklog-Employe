@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { approvalOutcome, buildInbox, previousWorkday } from "./todo-inbox";
 
 const job = (id, user_id, job_date, depart, fin, extra = {}) => ({ id, user_id, job_date, depart, fin, status: "submitted", ot: id, km_total: 10, ...extra });
-const profiles = new Map([["a", { id: "a", full_name: "Alice" }], ["b", { id: "b", full_name: "Bruno" }]]);
+const profiles = new Map([["a", { id: "a", employee_number: 1001 }], ["b", { id: "b", employee_number: 1002 }]]);
 
 describe("buildInbox", () => {
   const submittedJobs = [
@@ -22,7 +22,7 @@ describe("buildInbox", () => {
 
   it("groups submitted jobs into days per employee, anomalies apart", () => {
     expect(inbox.anomalyDays.map((d) => d.key)).toEqual(["b|2026-10-06"]);
-    expect(inbox.employees.map((e) => e.name)).toEqual(["Alice"]);
+    expect(inbox.employees.map((e) => e.name)).toEqual(["#1001"]);
     expect(inbox.employees[0].days.map((d) => d.date)).toEqual(["2026-10-06", "2026-10-07"]);
     expect(inbox.employees[0].days[0].minutes).toBe(5 * 60 + 4.5 * 60);
   });

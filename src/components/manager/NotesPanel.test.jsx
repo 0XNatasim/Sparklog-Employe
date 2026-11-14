@@ -34,7 +34,7 @@ function setup() {
       ],
       manager_note_replies: (call) => (call.op === "select" ? replies : call.op === "insert" ? { ...call.payload, id: "r4", user_id: "me", created_at: "2026-10-27T10:00:00Z" } : null),
       manager_note_reads: () => null,
-      profiles: [{ id: "karine", full_name: "Karine" }],
+      profiles: [{ id: "karine", employee_number: 1001 }],
     },
     rpcs: { my_note_unread_replies: [{ note_id: "chat", unread: 1 }] },
   });
@@ -63,7 +63,7 @@ describe("conversation under a shared note", () => {
     expect(mine.firstElementChild.className).toContain("bg-primary");
     expect(theirs.className).toContain("justify-start");
     expect(theirs.firstElementChild.className).toContain("bg-info/15");
-    await waitFor(() => expect(within(theirs).getByText("Karine")).toBeTruthy());
+    await waitFor(() => expect(within(theirs).getByText("#1001")).toBeTruthy());
     // Only the last reply was written since I last saw the note.
     expect(within(theirs).getByText(fr("notes.replies.new"))).toBeTruthy();
     expect(within(chat.getByText("Oui, je regarde demain").closest("li")).queryByText(fr("notes.replies.new"))).toBeNull();

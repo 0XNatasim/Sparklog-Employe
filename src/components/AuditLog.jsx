@@ -74,7 +74,7 @@ export default function AuditLog() {
     const target = row.target_name || t("audit.someone");
     const d = row.details || {};
     switch (row.action) {
-      case "user_deleted": return t("audit.desc.userDeleted", { name: target, email: d.email || "—" });
+      case "user_deleted": return t("audit.desc.userDeleted", { name: target, email: "—" });
       case "inventory_deleted": return t("audit.desc.inventoryDeleted", { name: target, date: d.job_date || "—", count: d.count || 0 });
       case "inventory_negative_dismissed": return t("audit.desc.inventoryNegativeDismissed", { name: target, date: d.job_date || "—" });
       case "role_change": return t("audit.desc.roleChange", { name: target, from: d.from || "—", to: d.to || "—" });

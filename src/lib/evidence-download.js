@@ -7,6 +7,7 @@ import { ccqWeekNumber, weekStartSundayD } from "@/lib/ccq-week";
 import { buildZip } from "@/lib/zip-store";
 import { QUERY_BUDGETS } from "@/lib/query-budgets";
 import { withTimeout } from "@/lib/utils";
+import { employeeLabel } from "@/lib/employee-label";
 
 export const OVERTIME_BUCKET = "overtime-evidence";
 export const PARKING_BUCKET = "parking-receipts";
@@ -80,9 +81,9 @@ export async function loadEvidenceCatalog(client) {
   const userIds = [...new Set([...(overtime.data || []), ...(parking.data || [])].map((row) => row.user_id))];
   const names = new Map();
   for (let i = 0; i < userIds.length; i += QUERY_BUDGETS.inListChunk) {
-    const { data, error } = await client.from("profiles").select("id, full_name").in("id", userIds.slice(i, i + QUERY_BUDGETS.inListChunk));
+    const { data, error } = await client.from("profiles").select("id, employee_number").in("id", userIds.slice(i, i + QUERY_BUDGETS.inListChunk));
     if (error) throw error;
-    for (const person of data || []) names.set(person.id, (person.full_name || "").trim());
+    for (const person of data || []) names.set(person.id, employeeLabel(person));
   }
   return {
     files: listEvidenceFiles({ overtime: overtime.data || [], parking: parking.data || [], names }),

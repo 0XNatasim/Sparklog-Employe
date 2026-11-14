@@ -1,9 +1,9 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.15.0
+# Sparklog-Employés (côté 1 : pointage) — V0.16.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
 
-**État (V0.15.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
+**État (V0.16.0, étape 1bis de `PLAN.md`) :** squelette copié de Sparklog V2.4.258, sans les écrans de gestion et de paie. Il compile (`npm run build`) et ses tests
 passent, mais il utilise encore la base et les noms de Sparklog : **il n'est pas encore branché sur une nouvelle base** et ne doit pas être utilisé en production.
 Ce qui reste à faire est dans `PLAN.md` (étapes 2 et suivantes) et la liste des écarts dans `OFFICIEL.md`.
 
@@ -50,3 +50,5 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.14.0 :** fonction Edge `activate_account` (première connexion : numéro d'employé + code d'activation + mot de passe choisi de 12 à 72 caractères ; code vérifié et consommé par `consume_activation_code`, puis mot de passe posé sur le compte à adresse factice ; réponses 401 générique / 410 expiré / 429 bloqué ; CORS limité à `ALLOWED_ORIGIN`), `src/lib/activate-account.test.js` (10 tests). L'écran de connexion de l'app n'est pas encore branché dessus.
 
 **V0.15.0 :** écran de connexion par numéro d'employé (`src/pages/Login.jsx`, `src/lib/employee-login.js`) : numéro + mot de passe (adresse factice `<numéro>@pointage.invalid` jamais affichée) ou, la première fois, numéro + code d'activation + mot de passe choisi via `activate_account`, puis connexion directe. Retirés : inscription libre, courriel, « mot de passe oublié » par courriel, page `ResetPassword` et sa route (un nouveau code vient de la gestion). Textes `login.*` (FR / EN). Tests : `Login.test.jsx` (7), `employee-login.test.js` (10).
+
+**V0.16.0 :** l'application n'affiche ni ne lit plus aucune donnée nominative (invariant I1). `AuthProvider` fournit `employeeNumber` (plus `fullName`) ; `Profile.jsx` ne montre que le numéro ; les écrans de gestion (En direct, Boîte à faire, Paie de la semaine → `WeekSnapshot`, Inventaire, Feuille d'urgence, Notes, Journal d'activité, Justificatifs…) identifient chaque employé par `employeeLabel()` (`#1042`, `src/lib/employee-label.js`) ; les lectures de `profiles` ne demandent plus nom, courriel, téléphone, région, syndicat ni carte CCQ ; retirés : `RegionOnboarding`, `CcqCardCapture`, `ReferenceContent`, `reference-blocks`, `ccq-card`, `ccq-regions`, `union-associations`. Garde-fou : `src/lib/no-personal-data.test.js` lit le code et échoue si une colonne nominative revient.

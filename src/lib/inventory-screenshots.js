@@ -1,3 +1,4 @@
+import { employeeLabel } from "@/lib/employee-label";
 // End-of-shift Field Service inventory: one to three screenshots per employee per work day,
 // as many as the phone needs to show the whole list (what counts is the list's line count).
 // Keep INVENTORY_REQUIRED_FROM in sync with the 0071 migration (the database enforces it).
@@ -94,5 +95,5 @@ export function planInventoryUploads(files, rows) {
 export function inventoryCandidates(people) {
   return (people || [])
     .filter((p) => p && !p.is_paused && p.role !== "admin")
-    .sort((a, b) => String(a.full_name || a.email || "").localeCompare(String(b.full_name || b.email || ""), "fr-CA"));
+    .sort((a, b) => String(employeeLabel(a) || "").localeCompare(String(employeeLabel(b) || ""), "fr-CA"));
 }

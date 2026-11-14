@@ -12,6 +12,7 @@ import { QUERY_BUDGETS } from "@/lib/query-budgets";
 import { addCalendarDays, companyDate } from "@/lib/company-time";
 import { MISSING_ENTRY_TRACKING_START } from "@/lib/live-crew";
 import { loadMissingEntryDays } from "@/lib/missing-days";
+import { employeeLabel } from "@/lib/employee-label";
 
 // Gestion → Audit → Employés: when each employee signs in / opens the app and when
 // they save, submit or delete a job (table employee_activity_log, migration 0067).
@@ -56,7 +57,7 @@ export default function EmployeeActivityLog() {
 
   useEffect(() => {
     let alive = true;
-    supabase.from("profiles").select("id, full_name, email, role, admin_sections, is_paused, show_on_boards, start_date").order("full_name").then(({ data }) => {
+    supabase.from("profiles").select("id, employee_number, role, admin_sections, is_paused, start_date").order("employee_number").then(({ data }) => {
       if (!alive) return;
       // Employees only: anyone who can open Gestion is left out.
       setEmployees((data || []).filter((p) => !hasManagementAccess(p.role, p.admin_sections)));
@@ -136,7 +137,7 @@ export default function EmployeeActivityLog() {
 
   const nameOf = useCallback((row) => {
     const e = employees.find((p) => p.id === row.user_id);
-    return e?.full_name || e?.email || row.user_name || t("audit.someone");
+    return employeeLabel(e) || row.user_name || t("audit.someone");
   }, [employees, t]);
 
   function describe(row) {
@@ -164,7 +165,7 @@ export default function EmployeeActivityLog() {
       if ((row.event === "login" || row.event === "app_open") && !seen.has(row.user_id)) seen.set(row.user_id, row.created_at);
     }
     return employees
-      .map((e) => ({ id: e.id, name: e.full_name || e.email, at: seen.get(e.id) || null }))
+      .map((e) => ({ id: e.id, name: employeeLabel(e), at: seen.get(e.id) || null }))
       .sort((a, b) => (b.at || "").localeCompare(a.at || "") || a.name.localeCompare(b.name));
   }, [employee, employees, rows]);
 
@@ -198,7 +199,7 @@ export default function EmployeeActivityLog() {
           <div className="flex flex-wrap items-center gap-2">
             <Select value={employee} onChange={(event) => setEmployee(event.target.value)} aria-label={t("activity.filter.employee")} className="h-9 min-w-44">
               <option value="all">{t("activity.filter.allEmployees")}</option>
-              {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name || e.email}</option>)}
+              {employees.map((e) => <option key={e.id} value={e.id}>{employeeLabel(e)}</option>)}
             </Select>
             <Select value={type} onChange={(event) => setType(event.target.value)} aria-label={t("activity.filter.type")} className="h-9">
               <option value="all">{t("activity.filter.allEvents")}</option>

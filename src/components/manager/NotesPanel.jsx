@@ -21,6 +21,7 @@ import {
 import { useT } from "@/lib/use-t";
 import { QUERY_BUDGETS } from "@/lib/query-budgets";
 import { cn, withTimeout } from "@/lib/utils";
+import { employeeLabel } from "@/lib/employee-label";
 
 const FILTERS = ["open", "reminders", "done"];
 const textareaClass = "w-full rounded-md border border-input bg-background px-3 py-2 text-base leading-relaxed shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -219,8 +220,8 @@ export default function NotesPanel() {
     const ids = otherIds ? otherIds.split(",").slice(0, QUERY_BUDGETS.inListChunk) : [];
     if (!ids.length) return undefined;
     let cancelled = false;
-    supabase.from("profiles").select("id, full_name, email").in("id", ids).then(({ data }) => {
-      if (!cancelled && data) setNames(new Map(data.map((p) => [p.id, p.full_name || p.email || ""])));
+    supabase.from("profiles").select("id, employee_number").in("id", ids).then(({ data }) => {
+      if (!cancelled && data) setNames(new Map(data.map((p) => [p.id, employeeLabel(p) || ""])));
     });
     return () => { cancelled = true; };
   }, [otherIds]);

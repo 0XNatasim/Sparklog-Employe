@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/supabaseClient";
 import { SESSION_RESUMED_EVENT } from "@/contexts/AuthContext";
+import { employeeLabel } from "@/lib/employee-label";
 
 export const NOTIFICATIONS_REFRESH_EVENT = "sparklog:notifications-refresh";
 
@@ -15,9 +16,9 @@ async function fetchManagerNotifications(managerId) {
   ]);
   const employeeIds = [...new Set((rows || []).map((row) => row.employee_id))];
   const { data: profiles } = employeeIds.length
-    ? await supabase.from("profiles").select("id, full_name, email").in("id", employeeIds)
+    ? await supabase.from("profiles").select("id, employee_number").in("id", employeeIds)
     : { data: [] };
-  const names = new Map((profiles || []).map((profile) => [profile.id, profile.full_name || profile.email]));
+  const names = new Map((profiles || []).map((profile) => [profile.id, employeeLabel(profile)]));
   const readIds = new Set((reads || []).map((read) => read.notification_id));
   return (rows || []).map((row) => ({ ...row, employeeName: names.get(row.employee_id) || "Employee", read: readIds.has(row.id) }));
 }

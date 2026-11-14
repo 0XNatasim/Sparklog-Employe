@@ -16,7 +16,7 @@ const { default: UnlockDayManager } = await import("./UnlockDayManager");
 const fr = (key) => dictionaries.fr[key];
 
 function setup(props) {
-  state.fake = createFakeSupabase({ tables: { profiles: [{ id: "zoe", full_name: "Zoé", is_paused: false }], job_entry_unlocks: [] } });
+  state.fake = createFakeSupabase({ tables: { profiles: [{ id: "zoe", employee_number: 1001, is_paused: false }], job_entry_unlocks: [] } });
   return render(<UnlockDayManager {...props} />);
 }
 
@@ -49,13 +49,13 @@ describe("UnlockDayManager wording", () => {
 });
 
 describe("UnlockDayManager bulk actions", () => {
-  const two = [{ id: "zoe", full_name: "Zoé", is_paused: false }, { id: "max", full_name: "Max", is_paused: false }];
+  const two = [{ id: "zoe", employee_number: 1001, is_paused: false }, { id: "max", employee_number: 1002, is_paused: false }];
 
   it("reopens one day for every active employee with a single write", async () => {
     state.fake = createFakeSupabase({ tables: { profiles: two, job_entry_unlocks: [] } });
     render(<UnlockDayManager plainWords />);
     const select = await screen.findByRole("combobox");
-    await waitFor(() => expect(screen.getByRole("option", { name: "Zoé" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: "#1001" })).toBeTruthy());
     fireEvent.change(select, { target: { value: "__all__" } });
     fireEvent.click(screen.getByRole("button", { name: fr("timeRules.unlockDay.plain") }));
     await waitFor(() => expect(state.fake.calls.some((c) => c.table === "job_entry_unlocks" && c.op === "upsert")).toBe(true));

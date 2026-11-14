@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 import { hasManagementAccess } from "@/lib/roles";
 import { useT } from "@/lib/use-t";
 import NotificationsBell from "@/components/NotificationsBell";
-import RegionOnboarding from "@/components/RegionOnboarding";
 import BroadcastPopup from "@/components/BroadcastPopup";
 import OfflineBanner from "@/components/OfflineBanner";
 import UpdateBanner from "@/components/UpdateBanner";
@@ -123,7 +122,6 @@ export default function AppShell({ children }) {
       <OfflineBanner />
       <UpdateBanner />
       {!isViewMode && <CcqCalendarBanner />}
-      {!isViewMode && <RegionOnboarding />}
       {!isViewMode && <BroadcastPopup />}
       {!isViewMode && <PushPrompt />}
       {isViewMode && (

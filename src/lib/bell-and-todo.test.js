@@ -23,12 +23,12 @@ describe("manager notifications of the bell", () => {
           { id: "n3", type: "parking_receipt", employee_id: "e1", created_at: "2026-10-24T11:00:00Z" },
         ],
         manager_notification_reads: (call) => (call.op === "select" ? [{ notification_id: "n3" }] : { data: null, error: null }),
-        profiles: [{ id: "e1", full_name: "Zoé" }],
+        profiles: [{ id: "e1", employee_number: 1001 }],
       },
     });
     const { result } = renderHook(() => useManagerNotifications(true, "me"));
     await waitFor(() => expect(result.current.unread).toBe(2));
-    expect(result.current.visible.map((n) => [n.id, n.employeeName])).toEqual([["n1", "Zoé"], ["n2", "Zoé"]]);
+    expect(result.current.visible.map((n) => [n.id, n.employeeName])).toEqual([["n1", "#1001"], ["n2", "#1001"]]);
     await act(() => result.current.markRead(result.current.visible));
     expect(state.fake.writes("manager_notification_reads")).toHaveLength(1);
     expect(state.fake.writes("manager_notification_reads")[0].payload).toEqual([

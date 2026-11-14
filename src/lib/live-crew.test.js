@@ -60,11 +60,11 @@ describe("activePeopleOnLeave", () => {
       { user_id: "off", kind: "date_range", start_date: "2026-09-30", end_date: "2026-09-30", start_time: "13:00", end_time: "16:00" },
       { user_id: "paused", kind: "date_range", start_date: "2026-09-30", end_date: "2026-09-30" },
     ];
-    const namedPeople = people.map((p) => ({ ...p, full_name: { crew: "Zoé", off: "Alice", paused: "Bob" }[p.id] }));
+    const namedPeople = people.map((p) => ({ ...p, employee_number: { crew: 1002, off: 1001, paused: 1003 }[p.id] }));
 
     expect(activePeopleOnLeave(namedPeople, leave, "2026-09-30")).toEqual([
-      { id: "off", name: "Alice" },
-      { id: "crew", name: "Zoé" },
+      { id: "off", name: "#1001" },
+      { id: "crew", name: "#1002" },
     ]);
   });
 });

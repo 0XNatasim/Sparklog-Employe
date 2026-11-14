@@ -24,6 +24,7 @@ import { lowStockByWarehouse } from "@/lib/inventory-ratios";
 import { useLowStock } from "@/lib/use-low-stock";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { QUERY_BUDGETS } from "@/lib/query-budgets";
+import { employeeLabel } from "@/lib/employee-label";
 
 const CHIP_CLASS = {
   missing: "border-destructive/40 bg-destructive/10 text-destructive",
@@ -41,7 +42,7 @@ const fetchAlerts = () => fetchInventoryNegativeAlerts().then((rows) => ({ rows 
 async function fetchInventoryDay(date) {
   const [peopleResult, shotsResult, itemsResult, timeOffResult] = await Promise.all([
     withTimeout(
-      supabase.from("profiles").select("id, full_name, email, role, is_paused, departure_status, start_date, work_region, inventory_screenshots_enabled").order("full_name").limit(QUERY_BUDGETS.inventoryPeople),
+      supabase.from("profiles").select("id, employee_number, role, is_paused, departure_status, start_date, inventory_screenshots_enabled").order("employee_number").limit(QUERY_BUDGETS.inventoryPeople),
       12000
     ),
     withTimeout(
@@ -178,7 +179,7 @@ export default function InventoryScreenshotsPanel() {
     const expected = (p) => p.inventory_screenshots_enabled && !p.is_paused && !p.departure_status && !isNewHire(p, date);
     const rows = people
       .filter((p) => expected(p) || shotsBy.has(p.id))
-      .map((p) => ({ person: p, name: p.full_name || p.email || p.id, ...summarizeInventoryDay(shotsBy.get(p.id) || [], itemsBy.get(p.id) || []), shots: shotsBy.get(p.id) || [] }))
+      .map((p) => ({ person: p, name: employeeLabel(p) || p.id, ...summarizeInventoryDay(shotsBy.get(p.id) || [], itemsBy.get(p.id) || []), shots: shotsBy.get(p.id) || [] }))
       .sort((a, b) => INVENTORY_STATE_ORDER.indexOf(a.state) - INVENTORY_STATE_ORDER.indexOf(b.state) || a.name.localeCompare(b.name, "fr-CA"));
     // Away all day (congé, vacances, absence, maladie) without a list: greyed, at the end.
     return markInventoryAbsences(rows, timeOff, date);
@@ -548,7 +549,7 @@ export default function InventoryScreenshotsPanel() {
           <div className="divide-y rounded-md border">
             {candidates.map((person) => (
               <label key={person.id} className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-sm font-medium">{person.full_name || person.email || person.id}</span>
+                <span className="text-sm font-medium">{employeeLabel(person) || person.id}</span>
                 <input
                   type="checkbox"
                   checked={Boolean(person.inventory_screenshots_enabled)}

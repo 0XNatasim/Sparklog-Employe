@@ -10,7 +10,7 @@ const { default: JobCard } = await import("./JobCard");
 
 const fr = (key) => dictionaries.fr[key];
 const job = { id: "j1", user_id: "f1", job_date: "2026-11-10", ot: "CONTREMAÎTRE", depart: "06:30:00", arrivee: "06:30:00", fin: "15:00:00", km_total: 0, km_aller: 0, km_retour: 0, status: "submitted", updated_at: "2026-11-10T21:00:00Z" };
-const employee = { id: "f1", full_name: "Éric Foreman" };
+const employee = { id: "f1", employee_number: 1001 };
 const props = { job, employee, shaded: false, dayOvertimeNoEvidence: false, overtimeCaptured: false, mealCaptured: false, manualEntry: false, focused: false, focusedEvidence: null, busy: false, onApprove: () => {}, onUnlock: () => {} };
 
 afterEach(cleanup);

@@ -24,7 +24,6 @@ import { canOpenNavItem, findNavItem, nestedTabs, resolveTab, tabPath, visibleMa
 import { SidebarTabsContext } from "@/components/manager/nav-context";
 import { isManagerRole } from "@/lib/roles";
 import ManagerBell from "@/components/manager/ManagerBell";
-import RegionOnboarding from "@/components/RegionOnboarding";
 import BroadcastPopup from "@/components/BroadcastPopup";
 import OfflineBanner from "@/components/OfflineBanner";
 import UpdateBanner from "@/components/UpdateBanner";
@@ -452,7 +451,6 @@ export default function ManagerLayout() {
       <OfflineBanner />
       <UpdateBanner />
       <PushPrompt />
-      <RegionOnboarding />
       <BroadcastPopup />
       <div className="flex min-h-screen">
         <aside className={cn("sticky top-0 hidden h-screen shrink-0 flex-col border-r bg-card", !navHidden && "md:flex", collapsed ? "w-14" : "w-60")}>

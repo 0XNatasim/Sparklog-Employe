@@ -14,6 +14,7 @@ import { loadDayRounding, roundingFor, weekRoundingSummary } from "@/lib/day-rou
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { liveRoster, notStartedOn, weekCellSummary } from "@/lib/live-crew";
+import { employeeLabel } from "@/lib/employee-label";
 
 // Compact current-week (Sunday → Saturday) overview: per employee and per day, the total
 // time, the number of ORs and a colour for saved (orange) / submitted (green) / missing (red).
@@ -71,7 +72,7 @@ export default function WeekSnapshot({ onSelectEmployee, weekOffset = 0 }) {
     let alive = true;
     const weekEnd = days[6];
     Promise.all([
-      supabase.from("profiles").select("id, full_name, email, role, is_paused, show_on_boards, start_date, ten_hour_days, first_trip_unpaid").order("full_name"),
+      supabase.from("profiles").select("id, employee_number, role, is_paused, start_date, ten_hour_days, first_trip_unpaid").order("employee_number"),
       supabase.from("jobs").select("id, user_id, status, depart, arrivee, fin, job_date, km_total, km_aller, km_retour, overtime_evidence_captured").gte("job_date", weekStart).lte("job_date", weekEnd),
       supabase.from("employee_time_off").select("user_id, kind, start_date, end_date, start_time, weekdays, exception_dates").lte("start_date", weekEnd).or(`end_date.gte.${weekStart},end_date.is.null`),
       // The rounding counters (15 min per day): without them the squares still show, only the paid line is missing.
@@ -127,7 +128,7 @@ export default function WeekSnapshot({ onSelectEmployee, weekOffset = 0 }) {
         foremanPaid: employee.role === "foreman" && cells.some((c) => c.foremanTopUp)
           ? cells.reduce((sum, c) => sum + (c.foremanTopUp ? FOREMAN_MIN_HOURS : c.hours), 0) : null,
       };
-    }).sort((a, b) => (a.employee.full_name || a.employee.email || "").localeCompare(b.employee.full_name || b.employee.email || ""));
+    }).sort((a, b) => (employeeLabel(a.employee) || "").localeCompare(employeeLabel(b.employee) || ""));
   }, [people, jobs, timeOff, days, holidays, rounding, weekStart]);
 
   // Saturday and Sunday only when somebody has a day on them (a quiet weekend takes no room).
@@ -205,7 +206,7 @@ export default function WeekSnapshot({ onSelectEmployee, weekOffset = 0 }) {
             <tbody>
               {rows.map(({ employee, cells, total, totalKm, round, hasDraft, foremanPaid }) => (
                 <tr key={employee.id}>
-                  <td className="max-w-[180px] truncate px-1 text-sm font-semibold">{employee.full_name || employee.email}</td>
+                  <td className="max-w-[180px] truncate px-1 text-sm font-semibold">{employeeLabel(employee)}</td>
                   {cells.filter((cell) => visibleDays.includes(cell.date)).map((cell) => (
                     <td key={cell.date} className="p-0">
                       <button

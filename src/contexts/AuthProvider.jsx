@@ -14,7 +14,7 @@ async function fetchRoleForUser(userId) {
     // so an un-timed query here can hang those paths. On timeout, fall through to
     // the safe default below rather than freezing.
     ({ data, error } = await withTimeout(
-      supabase.from("profiles").select("role, full_name, is_paused, admin_sections").eq("id", userId).maybeSingle(),
+      supabase.from("profiles").select("role, employee_number, is_paused, admin_sections").eq("id", userId).maybeSingle(),
       8000
     ));
   } catch (e) {
@@ -23,17 +23,17 @@ async function fetchRoleForUser(userId) {
 
   if (error) {
     console.warn("[Auth] fetchRole error:", error);
-    return { role: "Employee", full_name: null, is_paused: false, admin_sections: [] };
+    return { role: "Employee", employee_number: null, is_paused: false, admin_sections: [] };
   }
-  if (!data) return { role: "Employee", full_name: null, is_paused: false, admin_sections: [] };
+  if (!data) return { role: "Employee", employee_number: null, is_paused: false, admin_sections: [] };
 
-  return { role: data.role || "Employee", full_name: data.full_name || null, is_paused: Boolean(data.is_paused), admin_sections: Array.isArray(data.admin_sections) ? data.admin_sections : [] };
+  return { role: data.role || "Employee", employee_number: Number.isInteger(data.employee_number) ? data.employee_number : null, is_paused: Boolean(data.is_paused), admin_sections: Array.isArray(data.admin_sections) ? data.admin_sections : [] };
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
-  const [fullName, setFullName] = useState(null);
+  const [employeeNumber, setEmployeeNumber] = useState(null);
   const [isPaused, setIsPaused] = useState(false);
   const [adminSections, setAdminSections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
       .channel(`profile-access-${userId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${userId}` }, (payload) => {
         setRole(payload.new?.role || "Employee");
-        setFullName(payload.new?.full_name || null);
+        setEmployeeNumber(payload.new?.employee_number ?? null);
         setIsPaused(Boolean(payload.new?.is_paused));
         setAdminSections(Array.isArray(payload.new?.admin_sections) ? payload.new.admin_sections : []);
       })
@@ -84,7 +84,7 @@ export function AuthProvider({ children }) {
         .channel(`profile-access-${userId}`)
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${userId}` }, (payload) => {
           setRole(payload.new?.role || "Employee");
-          setFullName(payload.new?.full_name || null);
+          setEmployeeNumber(payload.new?.employee_number ?? null);
           setIsPaused(Boolean(payload.new?.is_paused));
         })
         .subscribe();
@@ -137,13 +137,13 @@ export function AuthProvider({ children }) {
           const r = await fetchRoleForUser(sessionUser.id);
           if (!cancelled) {
             setRole(r.role);
-            setFullName(r.full_name);
+            setEmployeeNumber(r.employee_number);
             setIsPaused(r.is_paused);
             setAdminSections(r.admin_sections);
           }
         } else {
           setRole(null);
-          setFullName(null);
+          setEmployeeNumber(null);
           setIsPaused(false);
           setAdminSections([]);
         }
@@ -173,13 +173,13 @@ export function AuthProvider({ children }) {
           setTimeout(async () => {
             const r = await fetchRoleForUser(nextUser.id);
             setRole(r.role);
-            setFullName(r.full_name);
+            setEmployeeNumber(r.employee_number);
             setIsPaused(r.is_paused);
             setAdminSections(r.admin_sections);
           }, 0);
         } else {
           setRole(null);
-          setFullName(null);
+          setEmployeeNumber(null);
           setIsPaused(false);
           setAdminSections([]);
           subscribeToProfile(null);
@@ -282,7 +282,7 @@ export function AuthProvider({ children }) {
           const profile = await fetchRoleForUser(session.user.id);
           if (cancelled) return;
           setRole(profile.role);
-          setFullName(profile.full_name);
+          setEmployeeNumber(profile.employee_number);
           setIsPaused(profile.is_paused);
           setAdminSections(profile.admin_sections);
         }
@@ -325,7 +325,7 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       role,
-      fullName,
+      employeeNumber,
       isPaused,
       adminSections,
       loading,
@@ -357,12 +357,12 @@ export function AuthProvider({ children }) {
         }
         setUser(null);
         setRole(null);
-        setFullName(null);
+        setEmployeeNumber(null);
         setIsPaused(false);
         setAdminSections([]);
       }
     }),
-    [user, role, fullName, isPaused, adminSections, loading, authError, mfa, refreshMfa]
+    [user, role, employeeNumber, isPaused, adminSections, loading, authError, mfa, refreshMfa]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

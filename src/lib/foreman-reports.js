@@ -1,6 +1,7 @@
 import { matchPreset } from "@/lib/preset-work-orders";
 import { QUERY_BUDGETS } from "@/lib/query-budgets";
 import { withTimeout } from "@/lib/utils";
+import { employeeLabel } from "@/lib/employee-label";
 
 // Foreman notes (0134, attached to the work sheet by 0136): a foreman auditing the other employees may add a short
 // note to his time entry when the work order is « CONTREMAÎTRE ». The note follows the job (deleted with it, kept when
@@ -103,8 +104,8 @@ export async function fetchForemanReports(client) {
   const ids = [...new Set(reports.map((report) => report.user_id))];
   const names = new Map();
   if (ids.length) {
-    const { data: people } = await withTimeout(client.from("profiles").select("id, full_name").in("id", ids), 12000);
-    for (const person of people || []) names.set(person.id, (person.full_name || "").trim());
+    const { data: people } = await withTimeout(client.from("profiles").select("id, employee_number").in("id", ids), 12000);
+    for (const person of people || []) names.set(person.id, employeeLabel(person));
   }
   return reports.map((report) => ({ ...report, author: names.get(report.user_id) || "" }));
 }

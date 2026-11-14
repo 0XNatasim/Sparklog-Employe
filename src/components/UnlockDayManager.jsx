@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/select";
 import { useT } from "@/lib/use-t";
 import { companyDate } from "@/lib/company-time";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { employeeLabel } from "@/lib/employee-label";
 
 // Temps › Débloquer journée: let one employee enter or edit a closed day (job_entry_unlocks).
 // plainWords (Gestion V3): « rouvrir / refermer une journée » and « retourner pour correction » instead of
@@ -25,7 +26,7 @@ export default function UnlockDayManager({ plainWords = false }) {
   const [busy, setBusy] = useState(false);
 
   const fetchUnlocks = () => Promise.all([
-    supabase.from("profiles").select("id, full_name, email, is_paused").order("full_name"),
+    supabase.from("profiles").select("id, employee_number, is_paused").order("employee_number"),
     supabase.from("job_entry_unlocks").select("id, user_id, job_date, unlocked_until").order("job_date", { ascending: false }),
   ]);
   function applyUnlocks([{ data: employeeRows }, { data: unlockRows }]) {
@@ -44,7 +45,7 @@ export default function UnlockDayManager({ plainWords = false }) {
 
   const employeeName = (id) => {
     const e = employees.find((row) => row.id === id);
-    return e?.full_name || e?.email || id;
+    return employeeLabel(e) || id;
   };
 
   async function unlockDay() {
@@ -165,7 +166,7 @@ export default function UnlockDayManager({ plainWords = false }) {
               <option value="">{t("timeRules.chooseEmployee")}</option>
               <option value={ALL}>{t(word("timeRules.allEmployees"))}</option>
               {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>{employee.full_name || employee.email}</option>
+                <option key={employee.id} value={employee.id}>{employeeLabel(employee)}</option>
               ))}
             </Select>
           </label>

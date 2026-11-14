@@ -1,5 +1,6 @@
 import { isNonWorkday } from "./workdays";
 import { isOffOn } from "./timeoff";
+import { employeeLabel } from "@/lib/employee-label";
 
 // Historical missing-entry auditing starts on the first day for which the board data
 // is considered complete. Earlier dates must never contribute to an employee total.
@@ -40,7 +41,7 @@ export function activePeopleOnLeave(people, timeOffRows, date) {
   const offUserIds = new Set((timeOffRows || []).filter((row) => isOffOn(row, date)).map((row) => row.user_id));
   return (people || [])
     .filter((person) => !person.is_paused && offUserIds.has(person.id))
-    .map((person) => ({ id: person.id, name: person.full_name || person.email || person.id }))
+    .map((person) => ({ id: person.id, name: employeeLabel(person) || person.id }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -63,7 +64,7 @@ export function missingEntryDays(people, jobs, timeOffRows, startDate, endDate, 
       const fullyOff = (timeOffRows || []).some((row) => row.user_id === person.id && !row.start_time && isOffOn(row, date));
       if (!fullyOff && !jobKeys.has(`${person.id}:${date}`)) dates.push(date);
     }
-    result.push({ id: person.id, name: person.full_name || person.email || person.id, count: dates.length, dates });
+    result.push({ id: person.id, name: employeeLabel(person) || person.id, count: dates.length, dates });
   }
 
   return result.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));

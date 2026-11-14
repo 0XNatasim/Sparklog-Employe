@@ -11,21 +11,21 @@ const read = (path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)
 describe("groupInventoryNegativeAlerts", () => {
   it("builds one card per employee and day, with each negative item", () => {
     const cards = groupInventoryNegativeAlerts([
-      { user_id: "a", full_name: "Adam", job_date: "2026-10-18", code: "EQ000002", item_name: "Lampe", quantity: -2 },
-      { user_id: "a", full_name: "Adam", job_date: "2026-10-18", code: "EQ000001", item_name: "Ampoule", quantity: -1 },
-      { user_id: "b", full_name: "Zoe", job_date: "2026-10-19", code: "EQ000009", item_name: "Fil", quantity: "-3.5" },
+      { user_id: "a", employee_label: "#1001", job_date: "2026-10-18", code: "EQ000002", item_name: "Lampe", quantity: -2 },
+      { user_id: "a", employee_label: "#1001", job_date: "2026-10-18", code: "EQ000001", item_name: "Ampoule", quantity: -1 },
+      { user_id: "b", employee_label: "#1002", job_date: "2026-10-19", code: "EQ000009", item_name: "Fil", quantity: "-3.5" },
     ]);
     expect(cards).toEqual([
       {
         userId: "b",
         jobDate: "2026-10-19",
-        name: "Zoe",
+        name: "#1002",
         items: [{ code: "EQ000009", name: "Fil", quantity: "-3.5" }],
       },
       {
         userId: "a",
         jobDate: "2026-10-18",
-        name: "Adam",
+        name: "#1001",
         items: [
           { code: "EQ000001", name: "Ampoule", quantity: -1 },
           { code: "EQ000002", name: "Lampe", quantity: -2 },
@@ -36,8 +36,8 @@ describe("groupInventoryNegativeAlerts", () => {
 
   it("keeps one line when the same code is repeated and falls back to the id", () => {
     const cards = groupInventoryNegativeAlerts([
-      { user_id: "a", full_name: "  ", job_date: "2026-10-18", code: "EQ000001", item_name: "Ampoule", quantity: -1 },
-      { user_id: "a", full_name: "Adam", job_date: "2026-10-18", code: "EQ000001", item_name: "Ampoule", quantity: -4 },
+      { user_id: "a", employee_label: "  ", job_date: "2026-10-18", code: "EQ000001", item_name: "Ampoule", quantity: -1 },
+      { user_id: "a", employee_label: "#1001", job_date: "2026-10-18", code: "EQ000001", item_name: "Ampoule", quantity: -4 },
       { user_id: "a", job_date: null, code: "EQ000003", item_name: "Ignore" },
     ]);
     expect(cards).toHaveLength(1);
@@ -45,16 +45,16 @@ describe("groupInventoryNegativeAlerts", () => {
     expect(cards[0].items).toEqual([{ code: "EQ000001", name: "Ampoule", quantity: -1 }]);
   });
 
-  it("uses the profile name when the alert row has only the account id", () => {
+  it("uses the profile employee number when the alert row has only the account id", () => {
     const named = namesForAlerts(
       [{ user_id: "employee-1", job_date: "2026-10-19", negative_count: 1 }],
-      [{ id: "employee-1", full_name: "Alex Martin", email: "alex@example.com" }]
+      [{ id: "employee-1", employee_number: 1003 }]
     );
-    expect(groupInventoryNegativeAlerts(named)[0].name).toBe("Alex Martin");
+    expect(groupInventoryNegativeAlerts(named)[0].name).toBe("#1003");
     expect(alertDisplayName(
       { userId: "employee-1", name: "employee-1" },
-      [{ id: "employee-1", full_name: "Alex Martin" }]
-    )).toBe("Alex Martin");
+      [{ id: "employee-1", employee_number: 1003 }]
+    )).toBe("#1003");
   });
 
   it("returns nothing for an empty list", () => {

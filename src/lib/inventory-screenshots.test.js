@@ -150,13 +150,13 @@ describe("0092 inventory gate", () => {
 });
 
 describe("inventoryCandidates (Inventaire › Qui fait l'inventaire)", () => {
-  it("lists active field employees by name, without office admins or paused accounts", () => {
+  it("lists active field employees by employee number, without office admins or paused accounts", () => {
     const people = [
-      { id: "z", full_name: "Zoé", role: "employee" },
-      { id: "a", full_name: "Alex", role: "subcontractor_1" },
-      { id: "o", full_name: "Bureau", role: "admin" },
-      { id: "p", full_name: "Parti", role: "employee", is_paused: true },
-      { id: "m", full_name: "Marc", role: "manager" },
+      { id: "z", employee_number: 1003, role: "employee" },
+      { id: "a", employee_number: 1001, role: "subcontractor_1" },
+      { id: "o", employee_number: 1004, role: "admin" },
+      { id: "p", employee_number: 1005, role: "employee", is_paused: true },
+      { id: "m", employee_number: 1002, role: "manager" },
     ];
     expect(inventoryCandidates(people).map((p) => p.id)).toEqual(["a", "m", "z"]);
     expect(inventoryCandidates(null)).toEqual([]);

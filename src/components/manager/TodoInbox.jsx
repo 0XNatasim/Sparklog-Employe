@@ -29,6 +29,7 @@ import { loadManualEntryJobIds } from "@/lib/entry-source";
 import { loadOtReuse } from "@/lib/ot-reuse";
 import { PARKING_BUCKET, parkingReceiptPaths } from "@/lib/parking-receipts";
 import ManualEntryStar from "@/components/ManualEntryStar";
+import { employeeLabel } from "@/lib/employee-label";
 
 const JOB_COLUMNS = "id, user_id, job_date, status, ot, depart, arrivee, fin, started_at, ended_at, km_total, km_aller, km_retour, return_time_minutes, overtime_evidence_captured, updated_at";
 
@@ -73,7 +74,7 @@ export default function TodoInbox() {
       const [submittedRes, peopleRes, mealsRes, parkingRes, settingsRes, timeOffRes, prevJobsRes] = await Promise.all([
         // Weeks paid by Dynacom (up to the imported cumulative, end of week 42) are closed: their jobs are not listed.
         withRetry(() => supabase.from("jobs").select(JOB_COLUMNS).eq("status", "submitted").gt("job_date", DYNACOM_CUMULATIVE_END).order("job_date", { ascending: true }).order("id").limit(QUERY_BUDGETS.todoSubmittedJobs), 12000),
-        withRetry(() => supabase.from("profiles").select("id, full_name, email, role, is_paused, show_on_boards, start_date, apprentice_level, first_trip_unpaid, ten_hour_days"), 12000),
+        withRetry(() => supabase.from("profiles").select("id, employee_number, role, is_paused, start_date, apprentice_level, first_trip_unpaid, ten_hour_days"), 12000),
         withRetry(() => supabase.from("meal_claims").select("id, job_id, user_id, job_date, amount, status").eq("status", "pending").order("job_date").limit(QUERY_BUDGETS.reviewQueue), 12000),
         withRetry(() => supabase.from("parking_receipts").select("job_id, user_id, job_date, amount, status, storage_path, extra_storage_paths").eq("status", "pending").order("job_date").limit(QUERY_BUDGETS.reviewQueue), 12000),
         supabase.from("company_time_settings").select("*").eq("id", true).maybeSingle(),
@@ -111,7 +112,7 @@ export default function TodoInbox() {
         const dayJobs = (prevJobsRes.data || []).filter((job) => job.job_date === day);
         const off = new Set((timeOffRes.data || []).filter((row) => isOffOn(row, day) && !row.start_time).map((row) => row.user_id));
         return notSubmittedYesterday(people, { yesterdayJobs: dayJobs, offUserIds: off, date: day })
-          .map((p) => ({ id: p.id, name: p.full_name || p.email || p.id, hasJobs: dayJobs.some((job) => job.user_id === p.id) }))
+          .map((p) => ({ id: p.id, name: employeeLabel(p) || p.id, hasJobs: dayJobs.some((job) => job.user_id === p.id) }))
           .sort((a, b) => a.name.localeCompare(b.name, "fr"));
       };
       // The most recent day that still has someone who did not submit (the previous work day when nobody is missing).
@@ -157,7 +158,7 @@ export default function TodoInbox() {
 
   const nameOf = (userId) => {
     const p = state?.profiles.get(userId);
-    return p?.full_name || p?.email || String(userId).slice(0, 8);
+    return employeeLabel(p) || String(userId).slice(0, 8);
   };
 
   function describeAnomaly(anomaly) {

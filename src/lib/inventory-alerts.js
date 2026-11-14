@@ -1,3 +1,4 @@
+import { employeeLabel } from "@/lib/employee-label";
 import { supabase } from "@/supabaseClient";
 import { canonicalEquipmentName } from "@/lib/equipment-names";
 import { withTimeout } from "@/lib/utils";
@@ -6,12 +7,12 @@ import { withTimeout } from "@/lib/utils";
 export const INVENTORY_ALERTS_EVENT = "sparklog:inventory-alerts";
 
 // The alert function on the server may return only user_id (until migration 0105).
-// Profiles already hold the name, so fill it in before grouping.
+// Profiles hold the employee number (never a name), so fill the label in before grouping.
 // Prefer the name already loaded on the Inventory page. The alert row falls back to
-// the account id when the server function does not return full_name.
+// the account id when the profile has no employee number.
 export function alertDisplayName(alert, people) {
   const person = (people || []).find((entry) => entry.id === alert?.userId);
-  const fromList = String(person?.full_name || "").trim() || String(person?.email || "").trim();
+  const fromList = employeeLabel(person);
   if (fromList) return fromList;
   if (alert?.name && alert.name !== alert.userId) return alert.name;
   return alert?.name || "";
@@ -20,13 +21,13 @@ export function alertDisplayName(alert, people) {
 export function namesForAlerts(rows, profiles) {
   const byId = new Map();
   for (const profile of profiles || []) {
-    const name = String(profile.full_name || "").trim() || String(profile.email || "").trim();
+    const name = employeeLabel(profile);
     if (profile.id && name) byId.set(profile.id, name);
   }
   return (rows || []).map((row) => {
-    if (String(row?.full_name || "").trim()) return row;
+    if (String(row?.employee_label || "").trim()) return row;
     const name = byId.get(row?.user_id);
-    return name ? { ...row, full_name: name } : row;
+    return name ? { ...row, employee_label: name } : row;
   });
 }
 
@@ -44,7 +45,7 @@ export function groupInventoryNegativeAlerts(rows) {
       group = {
         userId,
         jobDate: String(jobDate).slice(0, 10),
-        name: String(row.full_name || "").trim() || userId,
+        name: String(row.employee_label || "").trim() || userId,
         items: [],
       };
       groups.set(key, group);
@@ -66,10 +67,10 @@ export async function fetchInventoryNegativeAlerts() {
   const { data, error } = await withTimeout(supabase.rpc("inventory_negative_alerts"), 12000);
   if (error) throw error;
   const rows = data || [];
-  const ids = [...new Set(rows.filter((row) => row?.user_id && !String(row.full_name || "").trim()).map((row) => row.user_id))];
+  const ids = [...new Set(rows.filter((row) => row?.user_id && !String(row.employee_label || "").trim()).map((row) => row.user_id))];
   if (ids.length === 0) return rows;
   const { data: profiles, error: profileError } = await withTimeout(
-    supabase.from("profiles").select("id, full_name, email").in("id", ids),
+    supabase.from("profiles").select("id, employee_number").in("id", ids),
     12000
   );
   if (profileError) {

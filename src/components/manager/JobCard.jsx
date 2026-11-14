@@ -13,6 +13,7 @@ import { useT } from "@/lib/use-t";
 import { cn } from "@/lib/utils";
 import { jobCodeTintClass } from "@/lib/job-code";
 import { getKilometreBreakdown, minutesBetween } from "@/lib/payroll-calculations";
+import { employeeLabel } from "@/lib/employee-label";
 
 // One timesheet row of the manager dashboard. Memoized: it receives only primitives,
 // the row's own objects and stable callbacks, so approving, filtering or loading one
@@ -22,7 +23,7 @@ import { getKilometreBreakdown, minutesBetween } from "@/lib/payroll-calculation
 // V2 card, unchanged.
 function JobCard({ job: j, employee, shaded, dayOvertimeNoEvidence, overtimeCaptured, mealCaptured, manualEntry, foremanNote = null, onNoteRead, focused, focusedEvidence, busy, onApprove, onUnlock, nameFirst = false, plainWords = false }) {
   const t = useT();
-    const employeeName = employee?.full_name || employee?.email || `User ${String(j.user_id).slice(0, 8)}…`;
+    const employeeName = employeeLabel(employee) || `User ${String(j.user_id).slice(0, 8)}…`;
 
     // Worked hours from the authoritative interval calc, which wraps past
     // midnight (overnight jobs) exactly as the payroll classification does.
@@ -65,21 +66,6 @@ function JobCard({ job: j, employee, shaded, dayOvertimeNoEvidence, overtimeCapt
               <div className="min-w-0 space-y-0.5 md:w-72 md:shrink-0">
                 <div className="truncate text-sm font-semibold" title={employeeName}>{employeeName}</div>
                 <div className="flex flex-wrap items-center gap-1.5 text-sm font-bold">{otAndDate}</div>
-                {(employee?.phone || employee?.email) && (
-                  <div className="truncate text-xs text-muted-foreground">
-                    {employee?.phone && (
-                      <a href={`tel:${String(employee.phone).replace(/[^+\d]/g, "")}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                        {employee.phone}
-                      </a>
-                    )}
-                    {employee?.phone && employee?.email && " • "}
-                    {employee?.email && (
-                      <a href={`mailto:${employee.email}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                        {employee.email}
-                      </a>
-                    )}
-                  </div>
-                )}
               </div>
             ) : (
               <>
@@ -88,37 +74,11 @@ function JobCard({ job: j, employee, shaded, dayOvertimeNoEvidence, overtimeCapt
                   {otAndDate}
                 </div>
 
-                {/* Employee · phone · email — one line, no labels.
-                    Phone is a tel: link, email is a mailto: link. */}
+                {/* Employé : numéro seulement (jamais de nom, téléphone ni courriel côté 1). */}
                 <div
                   className="text-xs text-muted-foreground md:min-w-0 md:flex-1 md:truncate"
-                  title={[employee?.phone, employee?.email].filter(Boolean).join(" • ")}
-                >
+                                  >
                   <span className="font-semibold text-foreground">{employeeName}</span>
-                  {employee?.phone ? (
-                    <>
-                      {" • "}
-                      <a
-                        href={`tel:${String(employee.phone).replace(/[^+\d]/g, "")}`}
-                        className="text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {employee.phone}
-                      </a>
-                    </>
-                  ) : null}
-                  {employee?.email ? (
-                    <>
-                      {" • "}
-                      <a
-                        href={`mailto:${employee.email}`}
-                        className="text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {employee.email}
-                      </a>
-                    </>
-                  ) : null}
                 </div>
               </>
             )}

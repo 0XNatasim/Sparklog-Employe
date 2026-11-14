@@ -37,6 +37,7 @@ import EvidenceDownload from "@/components/manager/EvidenceDownload";
 import { PARKING_BUCKET, parkingReceiptPaths } from "@/lib/parking-receipts";
 import { filterReceiptJobs, receiptEmployees, receiptNeedsReview } from "@/lib/receipts-review";
 import ManualEntryStar from "@/components/ManualEntryStar";
+import { employeeLabel } from "@/lib/employee-label";
 
 dayjs.extend(isoWeek);
 
@@ -374,7 +375,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     (async () => {
       try {
         const { data } = await withRetry(
-          () => supabase.from("profiles").select("id, role, full_name, phone, email, ccq_number, is_paused, show_on_boards, first_trip_unpaid, ten_hour_days"),
+          () => supabase.from("profiles").select("id, employee_number, role, is_paused, first_trip_unpaid, ten_hour_days"),
           12000
         );
         if (!cancelled) setProfiles((current) => {
@@ -423,7 +424,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
         const missingProfileIds = [...new Set(orderedJobs.map((job) => job.user_id).filter((id) => !profiles.has(id)))];
         if (missingProfileIds.length) {
           const { data: profileRows, error: profileError } = await withRetry(
-            () => supabase.from("profiles").select("id, role, full_name, phone, email, ccq_number, first_trip_unpaid, ten_hour_days").in("id", missingProfileIds),
+            () => supabase.from("profiles").select("id, employee_number, role, first_trip_unpaid, ten_hour_days").in("id", missingProfileIds),
             12000
           );
           if (profileError) throw profileError;
@@ -487,7 +488,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
         const missingProfileIds = [...new Set(orderedJobs.map((job) => job.user_id).filter((id) => !profiles.has(id)))];
         if (missingProfileIds.length) {
           const { data: profileRows, error: profileError } = await withRetry(
-            () => supabase.from("profiles").select("id, role, full_name, phone, email, ccq_number, first_trip_unpaid, ten_hour_days").in("id", missingProfileIds),
+            () => supabase.from("profiles").select("id, employee_number, role, first_trip_unpaid, ten_hour_days").in("id", missingProfileIds),
             12000
           );
           if (profileError) throw profileError;
@@ -533,7 +534,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
         const orderedRows = (rows || []).sort((a, b) => order.get(a.id) - order.get(b.id));
         const missingProfileIds = [...new Set(orderedRows.map((job) => job.user_id).filter((id) => !profilesRef.current.has(id)))];
         const { data: people } = missingProfileIds.length
-          ? await withRetry(() => supabase.from("profiles").select("id, role, full_name, phone, email, ccq_number, first_trip_unpaid, ten_hour_days").in("id", missingProfileIds), 12000)
+          ? await withRetry(() => supabase.from("profiles").select("id, employee_number, role, first_trip_unpaid, ten_hour_days").in("id", missingProfileIds), 12000)
           : { data: [] };
         // Every job of each supper's day: the check shows the day's work, return time and km.
         const users = [...new Set(orderedRows.map((job) => job.user_id))];
@@ -590,7 +591,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     const receipt = parkingReceipts.get(jobId);
     const who = profiles.get(receipt?.user_id);
     const ok = await confirm(t(status === "approved" ? "confirm.acceptParking" : "confirm.rejectParking", {
-      name: who?.full_name || who?.email || "",
+      name: employeeLabel(who) || "",
       date: receipt?.job_date ? dayjs(receipt.job_date).format("ddd D MMM") : "",
       amount: `${Number(receipt?.amount || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })} $`,
     }));
@@ -673,7 +674,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     profiles.forEach((p, id) => {
       // Hide inactive employees and anyone opted out of the boards (e.g. the boss).
       if (p?.is_paused || p?.show_on_boards === false) return;
-      const label = p?.full_name?.trim() || p?.email?.trim() || `User ${String(id).slice(0, 8)}…`;
+      const label = employeeLabel(p) || `User ${String(id).slice(0, 8)}…`;
       arr.push({ id, label });
     });
     arr.sort((a, b) => a.label.localeCompare(b.label));
@@ -698,7 +699,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
   const sortedAll = useMemo(() => {
     const nameFor = (id) => {
       const p = profiles.get(id);
-      return (p?.full_name?.trim() || p?.email?.trim() || String(id)).toLowerCase();
+      return (employeeLabel(p) || String(id)).toLowerCase();
     };
     const approvedRank = (status) => (status === "approved" ? 1 : 0);
     return [...filtered].sort((a, b) => {
@@ -739,10 +740,8 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
   const selectedEmployee = useMemo(() => {
     if (employeeId === "all") return null;
     const p = profiles.get(employeeId);
-    const name = p?.full_name || p?.email || `User ${String(employeeId).slice(0, 8)}…`;
-    const phone = p?.phone || "";
-    const email = p?.email || "";
-    return { id: employeeId, name, phone, email };
+    const name = employeeLabel(p) || `User ${String(employeeId).slice(0, 8)}…`;
+    return { id: employeeId, name };
   }, [employeeId, profiles]);
 
   const weekOptions = useMemo(() => {
@@ -790,9 +789,9 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     return split.submitted.filter((j) => weekKeyFromDate(j.job_date) === effectiveWeekKey);
   }, [split, selectedEmployee, effectiveWeekKey, weekOptions.length]);
 
-  function employeeLabel(userId) {
+  function labelForUserId(userId) {
     const employee = profiles.get(userId);
-    return employee?.full_name || employee?.email || `User ${String(userId).slice(0, 8)}…`;
+    return employeeLabel(employee) || `User ${String(userId).slice(0, 8)}…`;
   }
 
   function describeAnomaly(anomaly) {
@@ -811,7 +810,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
   function anomalyWarning(jobIds) {
     const hits = anomaliesForJobs(activeAnomalies, jobIds);
     if (hits.length === 0) return "";
-    const lines = hits.slice(0, 5).map((anomaly) => `• ${employeeLabel(anomaly.userId)} · ${dayjs(anomaly.jobDate).format("DD MMM")} · ${describeAnomaly(anomaly)}`);
+    const lines = hits.slice(0, 5).map((anomaly) => `• ${labelForUserId(anomaly.userId)} · ${dayjs(anomaly.jobDate).format("DD MMM")} · ${describeAnomaly(anomaly)}`);
     if (hits.length > 5) lines.push("…");
     return t("manager.confirm.anomalies", { count: hits.length, list: lines.join("\n") });
   }
@@ -843,7 +842,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     const target = [...jobs, ...overtimeJobs, ...parkingJobs, ...notificationMealJobs].find((x) => x.id === jobId);
     const who = profiles.get(target?.user_id);
     const question = t("confirm.approveJob", {
-      name: who?.full_name || who?.email || "",
+      name: employeeLabel(who) || "",
       date: target?.job_date ? dayjs(target.job_date).format("ddd D MMM") : "",
       ot: target?.ot || "",
     });
@@ -1088,7 +1087,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
     const receipt = parkingReceipts.get(job.id);
     const hasMeal = mealJobIds.has(job.id) || notificationMealJobs.some((mealJob) => mealJob.id === job.id);
     const employee = profiles.get(job.user_id);
-    const employeeName = employee?.full_name || employee?.email || `User ${String(job.user_id).slice(0, 8)}…`;
+    const employeeName = employeeLabel(employee) || `User ${String(job.user_id).slice(0, 8)}…`;
     const totalHours = minutesBetween(job.depart, job.fin) / 60;
     const { totalKm: km } = getKilometreBreakdown(job);
     const isProofVisible = visibleProof.has(job.id);
@@ -1099,7 +1098,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 font-bold"><span>{job.ot} · {dayjs(job.job_date).format("DD MMM YYYY")}</span><JobCaptureIcons job={{ ...job, overtime_evidence_captured: Boolean(evidence), parking_receipt_captured: Boolean(receipt), meal_claim_captured: hasMeal }} /></div>
-            <div className="mt-1 text-sm text-muted-foreground"><span className="font-semibold text-foreground">{employeeName}</span>{employee?.phone ? <> · <a className="text-primary hover:underline" href={`tel:${String(employee.phone).replace(/[^+\d]/g, "")}`}>{employee.phone}</a></> : null}{employee?.email ? <> · <a className="text-primary hover:underline" href={`mailto:${employee.email}`}>{employee.email}</a></> : null}</div>
+            <div className="mt-1 text-sm text-muted-foreground"><span className="font-semibold text-foreground">{employeeName}</span></div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={statusBadgeVariant(job.status)} className="uppercase tracking-wide">{t(`status.${job.status}`)}</Badge>
@@ -1280,8 +1279,6 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
               <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
                 <div className="text-xs text-muted-foreground">
                   {t("manager.selectedEmployee")}: <b className="text-foreground">{selectedEmployee.name}</b>
-                  {selectedEmployee.phone ? <> • {t("manager.phone")}: <b className="text-foreground">{selectedEmployee.phone}</b></> : null}
-                  {selectedEmployee.email ? <> • {t("manager.email")}: <b className="text-foreground">{selectedEmployee.email}</b></> : null}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1416,7 +1413,7 @@ export default function ManagerDashboard({ view = "timesheet", nameFirst = false
                           onClick={() => openAnomaly(anomaly)}
                           className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 py-1.5 text-left text-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
                         >
-                          <b>{employeeLabel(anomaly.userId)}</b>
+                          <b>{labelForUserId(anomaly.userId)}</b>
                           <span className="tabular-nums">{dayjs(anomaly.jobDate).format("DD MMM YYYY")}</span>
                           <span>{describeAnomaly(anomaly)}</span>
                         </button>

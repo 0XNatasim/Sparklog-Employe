@@ -1,4 +1,5 @@
 import { getKilometreBreakdown, minutesBetween } from "./payroll-calculations";
+import { employeeLabel } from "@/lib/employee-label";
 
 // « À traiter » (Équipe en direct › V3): every submitted job grouped by employee and day,
 // with what the manager decides on that day — overtime proof, supper claim, parking
@@ -8,7 +9,7 @@ import { getKilometreBreakdown, minutesBetween } from "./payroll-calculations";
 const dayKey = (userId, date) => `${userId}|${date}`;
 
 function personName(profile, userId) {
-  return profile?.full_name || profile?.email || String(userId || "").slice(0, 8);
+  return employeeLabel(profile) || String(userId || "").slice(0, 8);
 }
 
 // submittedJobs: jobs with status 'submitted'. anomalies: detectJobAnomalies() output.

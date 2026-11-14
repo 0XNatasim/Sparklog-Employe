@@ -23,7 +23,7 @@ const fr = (key) => dictionaries.fr[key];
 function setup(jobs, profileExtra = {}, props = {}) {
   state.fake = createFakeSupabase({
     tables: {
-      profiles: [{ id: "e1", full_name: "Employé Test", email: "e@test.invalid", role: "employee", is_paused: false, show_on_boards: true, start_date: "2026-01-05", first_trip_unpaid: false, ...profileExtra }],
+      profiles: [{ id: "e1", employee_number: 1001, role: "employee", is_paused: false, show_on_boards: true, start_date: "2026-01-05", first_trip_unpaid: false, ...profileExtra }],
       jobs,
       employee_time_off: [],
     },
@@ -41,7 +41,7 @@ describe("WeekSnapshot rounding", () => {
   it("shows what is paid, the week's difference and the counter under the total", async () => {
     // Mon 8h07 → 8h00 (−7, counter −7); Tue 8h07 → 7 min carried over: 487 + 7 = 494 → 8h15 (+8, counter +1).
     setup([job("a", "2026-10-19", "07:00", "15:07"), job("b", "2026-10-20", "07:00", "15:07")]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(await screen.findByText("payé 16h15 · arr. +1 · cpt +1")).toBeTruthy();
     // The squares keep the time entered, to the minute: 8h07.
     expect(screen.getAllByText("8h07").length).toBe(2);
@@ -50,7 +50,7 @@ describe("WeekSnapshot rounding", () => {
 
   it("marks the paid line when a draft day is not counted", async () => {
     setup([job("a", "2026-10-19", "07:00", "15:00"), job("b", "2026-10-20", "07:00", "15:07", { status: "saved" })]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(await screen.findByText("payé 8h00* · arr. 0 · cpt 0")).toBeTruthy();
   });
 });
@@ -60,14 +60,14 @@ describe("WeekSnapshot columns", () => {
 
   it("leaves Saturday and Sunday out when nobody has a day on them", async () => {
     setup([job("a", "2026-10-19", "07:00", "15:07")]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(headers()).toHaveLength(7); // employee + Monday to Friday + total
     expect(headers().join(" ")).not.toMatch(/Sat|Sun/);
   });
 
   it("shows a weekend day as soon as somebody has a day on it", async () => {
     setup([job("a", "2026-10-19", "07:00", "15:07"), job("b", "2026-10-24", "08:00", "12:00")]); // Saturday
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(headers()).toHaveLength(8);
     expect(headers().join(" ")).toMatch(/Sat 24/);
     expect(headers().join(" ")).not.toMatch(/Sun/);
@@ -77,7 +77,7 @@ describe("WeekSnapshot columns", () => {
 describe("WeekSnapshot week filter", () => {
   it("offers this week and the 12 before it, the first two named", async () => {
     setup([job("a", "2026-10-19", "07:00", "15:07")]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     const select = screen.getByLabelText(fr("live.week.pick"));
     const options = [...select.querySelectorAll("option")];
     expect(options).toHaveLength(13);
@@ -98,7 +98,7 @@ describe("WeekSnapshot week filter", () => {
 
   it("cannot go past this week, and can step back with the arrow", async () => {
     setup([job("a", "2026-10-19", "07:00", "15:07")]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(screen.getByRole("button", { name: fr("live.week.later") }).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: fr("live.week.earlier") }));
     await screen.findByText(/11 Oct → 17 Oct 2026/);
@@ -110,14 +110,14 @@ describe("WeekSnapshot foreman minimum", () => {
   it("flags a weekday under 8 h worked and shows the paid total with the minimum", async () => {
     // Mon 2 h, Tue 9 h: Monday is topped up to 8 h, Tuesday is left alone → paid 17 h.
     setup([job("a", "2026-10-19", "07:00", "09:00"), job("b", "2026-10-20", "07:00", "16:00")], { role: "foreman" });
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(screen.getAllByText(fr("live.week.foremanMin")).length).toBe(1);
     expect(screen.getByText(fr("live.week.foremanPaid").replace("{time}", "17h00"))).toBeTruthy();
   });
 
   it("shows nothing extra for another role", async () => {
     setup([job("a", "2026-10-19", "07:00", "09:00")]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(screen.queryByText(fr("live.week.foremanMin"))).toBeNull();
   });
 });
@@ -129,13 +129,13 @@ describe("WeekSnapshot overtime proof missing", () => {
       job("a", "2026-10-19", "06:00", "15:00", { status: "saved", overtime_evidence_captured: false }),
       job("b", "2026-10-20", "06:00", "15:00", { status: "saved", overtime_evidence_captured: true }),
     ]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(document.querySelectorAll('button[title="' + fr("live.week.proofMissingTitle") + '"]')).toHaveLength(1);
   });
 
   it("does not outline a submitted day", async () => {
     setup([job("a", "2026-10-19", "06:00", "15:00", { status: "submitted", overtime_evidence_captured: true })]);
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(document.querySelectorAll('button[title="' + fr("live.week.proofMissingTitle") + '"]')).toHaveLength(0);
   });
 });
@@ -146,23 +146,23 @@ describe("WeekSnapshot overtime proof with the unpaid first trip and 4 days of 1
 
   it("counts paid time: 8 h 30 with a 45-minute unpaid first trip is under 8 h, so not outlined", async () => {
     setup(dayJobs(), { first_trip_unpaid: true });
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(outlined()).toBe(0);
   });
 
   it("outlines the same day without that option (8 h 30 paid)", async () => {
     setup(dayJobs(), { first_trip_unpaid: false });
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(outlined()).toBe(1);
   });
 
   it("uses 10 h for « 4 jours de 10 h »: 9 h is not outlined, 11 h is", async () => {
     setup([job("a", "2026-10-19", "06:00", "15:00", { status: "saved", overtime_evidence_captured: false })], { ten_hour_days: true });
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(outlined()).toBe(0);
     cleanup();
     setup([job("a", "2026-10-19", "06:00", "17:00", { status: "saved", overtime_evidence_captured: false })], { ten_hour_days: true });
-    await screen.findByText("Employé Test");
+    await screen.findByText("#1001");
     expect(outlined()).toBe(1);
   });
 });
