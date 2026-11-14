@@ -1,10 +1,10 @@
-# NOOB — Sparklog-Employés (V0.20.0)
+# NOOB — Sparklog-Employés (V0.21.0)
 
 **Ce que c'est :** la moitié « pointage » de Sparklog, en train d'être construite dans un nouveau dépôt. L'autre moitié (noms, paie) est dans `Sparklog-Gestion`.
 
 **Ce que vous voyez maintenant :** rien de nouveau pour les employés. Ce dépôt n'est **pas** utilisé en production : Sparklog (l'ancien dépôt) tourne toujours.
 
-**Ce qui a été fait (V0.20.0) :** le code du pointage a été copié de Sparklog, et les écrans de gestion et de paie ont été retirés (ils sont dans Sparklog-Gestion).
+**Ce qui a été fait (V0.21.0) :** le code du pointage a été copié de Sparklog, et les écrans de gestion et de paie ont été retirés (ils sont dans Sparklog-Gestion).
 
 **V0.11.0 :** documentation seulement — `PLAN.md` complété (codes d'activation, journaux minimaux, CSV d'abord, couche d'authentification séparée, corrections sans écrasement). Aucun code changé.
 
@@ -61,3 +61,5 @@
 **V0.19.0 :** **nettoyage de ce qui appartient à la gestion.** J'ai retiré de cette application : vos notes personnelles de gestionnaire, les taux et barèmes de paie, les inscriptions et dates d'embauche, et la carte « État du service ». Le **temps libre** n'est plus lu ici (il sera dans Sparklog-Gestion) : l'écran En direct ne tient donc plus compte des absences. Le menu Notes ne garde que les **notes du contremaître**. **Il reste 6 écarts** entre l'application et la base : les annonces et les noms (note du contremaître, journal, feuille d'urgence) à remplacer par des numéros. **Rien ne change pour les employés.**
 
 **V0.20.0 :** **l'application et la nouvelle base de données se correspondent maintenant** : mon outil de comparaison ne trouve plus aucun écart. Dernières retouches : les **annonces** viennent des nouvelles tables (l'employé les voit dans sa cloche, accuse réception une fois) ; le bouton « Rappeler » de la boîte à faire est **retiré** (il envoyait une annonce, ce que seule la gestion fera) ; dans la **note du contremaître**, « employé audité » demande maintenant un **numéro d'employé** (4 à 6 chiffres) au lieu d'un nom ; on ne montre plus qui a retourné une fiche ni qui a fait une saisie d'urgence (« La gestion »). J'ai supprimé un **ancien ping automatique** qui visait la base de Sparklog, et ajouté un contrôle automatique à la CI (non encore vu tourner sur GitHub). **Vous pouvez maintenant regarder le côté 1** : page sur Canner + une base Supabase **de test avec des données bidon** (je peux préparer le mode d'emploi pas à pas). **Rien ne change pour les employés.**
+
+**V0.21.0 :** **le mode d'emploi pour voir le côté 1 est prêt** : `docs/mode-emploi-apercu.md` (12 étapes, environ 1 h). En bref : un projet Supabase **de test vide** (jamais votre projet actuel, jamais de vraies données), un fichier SQL à coller (`docs/apercu/schema-apercu.sql`), trois réglages de connexion, deux fonctions à mettre en ligne (3 commandes), un compte propriétaire de test (numéro 1000), la page sur Canner avec deux variables, puis la création d'employés de test et l'activation par code. **Ce qui est vérifié :** les scripts SQL tournent sur un PostgreSQL local. **Ce qui ne l'est pas :** les réglages de Supabase et de Canner (mes lectures, pas un essai sur vos comptes) : si un menu a un autre nom, dites-moi ce que vous voyez. **Ce que vous faites :** suivre les étapes et me dire où ça bloque. **Rien ne change pour les employés.**

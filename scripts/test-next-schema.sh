@@ -22,6 +22,17 @@ create function storage.foldername(name text) returns text[] language sql immuta
 grant usage on schema public, auth, extensions, storage to anon, authenticated, service_role;
 grant select, insert on storage.objects to authenticated;
 SQL
+# Vérification du fichier d'aperçu : PREVIEW_SQL=docs/apercu/schema-apercu.sql scripts/test-next-schema.sh applique ce fichier d'un seul coup (sans les tests).
+if [ -n "${PREVIEW_SQL:-}" ]; then
+  $PSQL -f "$ROOT/$PREVIEW_SQL" && echo "OK : fichier d'aperçu appliqué d'un seul coup"
+  # Les deux petits scripts du mode d'emploi, sur un faux utilisateur 1000@pointage.invalid
+  $PSQL -c "insert into auth.users (id, email) values (gen_random_uuid(), '1000@pointage.invalid')"
+  $PSQL -f "$ROOT/docs/apercu/1-proprietaire.sql" >/dev/null
+  test "$($PSQL -At -c "select count(*) from public.profiles where employee_number = 1000 and role = 'owner'")" = 1
+  test "$($PSQL -At -c "select left(secret, 4) from public.sync_create_client('apercu')")" = skc_
+  echo "OK : scripts 1-proprietaire.sql et 2-client-api.sql"
+  exit 0
+fi
 # Chaque migration est appliquée puis son test est lancé AVANT la suivante : un test décrit l'état de sa propre migration
 # (une migration ultérieure peut remplacer une fonction, ce que son propre test vérifie).
 for f in "$ROOT"/supabase/next/[0-9]*.sql; do
