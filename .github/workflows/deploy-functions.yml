@@ -28,4 +28,4 @@ jobs:
       - name: Adresse autorisée pour l'activation (si le secret GitHub ALLOWED_ORIGIN existe)
         env:
           ALLOWED_ORIGIN: ${{ secrets.ALLOWED_ORIGIN }}
-        run: '[ -z "$ALLOWED_ORIGIN" ] || supabase secrets set ALLOWED_ORIGIN="$ALLOWED_ORIGIN" --project-ref "$PROJECT_REF"'
+        run: '[ -z "$ALLOWED_ORIGIN" ] || supabase secrets set ALLOWED_ORIGIN="$ALLOWED_ORIGIN" --project-ref "$PROJECT_REF" --yes'
