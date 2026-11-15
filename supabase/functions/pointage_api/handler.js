@@ -17,6 +17,7 @@ export const MAX_LIMIT = 500;
 export const ACTION_TYPES = Object.freeze([
   "approve_jobs", "return_job", "set_pause", "register_account", "reissue_activation_code", "unlock_day", "upsert_group", "set_group_members",
   "set_role", "publish_announcement", "edit_announcement", "withdraw_announcement",
+  "delete_group", "set_holiday", "set_time_options",
 ]);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

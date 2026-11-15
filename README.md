@@ -1,4 +1,4 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.27.0
+# Sparklog-Employés (côté 1 : pointage) — V0.28.0
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
@@ -72,6 +72,8 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.24.1 :** résultat du banc d'essai Tesseract 5.3 (eng + fra, modèles « fast » d'Ubuntu) sur 14 captures Field Service réelles + 1 photo sans rapport : **mode `--psm 11` (texte épars), image brute : 14/14 captures lues sans aucune erreur** (OT, date, départ, arrivée, fin, km, miles) ; `--psm 6` / `4` / `3` : tous les champs sauf les « miles » (le contrôle de cohérence km / miles ne se ferait pas) ; agrandir ×2 ou ×3 ne sert à rien (1 à 2 OT mal lus de plus) ; la réduction à 1600 px / JPEG 70 de l'application ne nuit pas ; la photo sans rapport ne produit aucun champ (0 faux positif). Durée : environ 10 s par image sur 4 cœurs (eng + fra, 1080 × 2340) : à réduire (eng seul, image réduite) avant de décider. Limites : 14 captures dont plusieurs sont la même fiche (environ 7 fiches distinctes), un seul téléphone, aucune comparaison avec OCR.space.
 
 **V0.24.2 :** décision de la propriétaire : **OCR.space est gardé pour l'instant** ; Tesseract est noté dans `docs/ocr-tesseract.md` (résultat de l'essai, limites, essai à compléter, plan de travail si on change). Aucun code changé.
+
+**V0.28.0 :** migration `0017_group_holiday_time_actions` : trois actions de plus pour la gestion. `delete_group` (le groupe, ses membres et ses minimums de stock disparaissent ; rejouable), `set_holiday` (ajouter, renommer ou retirer un jour férié ou un congé de la construction : la gestion devient la source de la liste), `set_time_options` (les quatre options qui changent le temps : premier trajet non payé, « 4 jours de 10 h », retour avec avantages, 1re heure supplémentaire à 2× ; seules les options données changent, jamais un montant). `pointage_api` : 15 types d'actions.
 
 **V0.27.0 :** migration `0016_group_ids` : l'action `upsert_group` accepte un identifiant (`id`) choisi par la gestion : le même groupe porte le même uuid des deux côtés (pas de table de correspondance), la création est rejouable, le renommage est permis, un nom déjà pris par un autre groupe est refusé. Les groupes se gèrent côté gestion ; ici ils ne servent plus qu'à l'inventaire et au stock minimum.
 

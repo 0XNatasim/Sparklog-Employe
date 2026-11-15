@@ -201,7 +201,7 @@ describe("actions", () => {
   });
 
   it("n'accepte que les types prévus", async () => {
-    expect(ACTION_TYPES).toEqual(["approve_jobs", "return_job", "set_pause", "register_account", "reissue_activation_code", "unlock_day", "upsert_group", "set_group_members", "set_role", "publish_announcement", "edit_announcement", "withdraw_announcement"]);
+    expect(ACTION_TYPES).toEqual(["approve_jobs", "return_job", "set_pause", "register_account", "reissue_activation_code", "unlock_day", "upsert_group", "set_group_members", "set_role", "publish_announcement", "edit_announcement", "withdraw_announcement", "delete_group", "set_holiday", "set_time_options"]);
     for (const type of [undefined, "", "delete_everything", "SET_PAUSE", 12]) {
       const deps = makeDeps();
       const r = await read(await handle(post({ ...good, type }), deps));
