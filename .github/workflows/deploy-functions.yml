@@ -24,6 +24,13 @@ jobs:
           echo "PROJECT_REF=$R" >> "$GITHUB_ENV"
       - name: Préparer le dossier Supabase
         run: '[ -f supabase/config.toml ] || supabase init'
+      - name: Diagnostic - le jeton voit-il le projet visé ?
+        run: |
+          supabase projects list -o json > "$RUNNER_TEMP/p.json" || { echo "Le jeton ne peut pas lister les projets : jeton invalide, expiré ou sans accès."; exit 1; }
+          echo "Projets visibles avec ce jeton : $(jq 'length' "$RUNNER_TEMP/p.json")"
+          M=$(jq -r --arg r "$PROJECT_REF" '[.[] | select((.id // .ref) == $r)] | length' "$RUNNER_TEMP/p.json")
+          if [ "$M" = "0" ]; then echo "SUPABASE_PROJECT_REF n'est PAS celle d'un projet visible avec ce jeton (autre compte ou autre organisation, ou référence d'un autre projet)."; exit 1; fi
+          jq -r --arg r "$PROJECT_REF" '.[] | select((.id // .ref) == $r) | "Projet visé : région " + (.region // "?")' "$RUNNER_TEMP/p.json"
       - name: Déployer
         run: |
           for fn in pointage_api activate_account; do

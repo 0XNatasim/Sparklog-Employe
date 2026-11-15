@@ -1,4 +1,4 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.29.3
+# Sparklog-Employés (côté 1 : pointage) — V0.29.4
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
@@ -73,17 +73,19 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 
 **V0.24.2 :** décision de la propriétaire : **OCR.space est gardé pour l'instant** ; Tesseract est noté dans `docs/ocr-tesseract.md` (résultat de l'essai, limites, essai à compléter, plan de travail si on change). Aucun code changé.
 
-**V0.29.3 :** migration `0017_group_holiday_time_actions` : trois actions de plus pour la gestion. `delete_group` (le groupe, ses membres et ses minimums de stock disparaissent ; rejouable), `set_holiday` (ajouter, renommer ou retirer un jour férié ou un congé de la construction : la gestion devient la source de la liste), `set_time_options` (les quatre options qui changent le temps : premier trajet non payé, « 4 jours de 10 h », retour avec avantages, 1re heure supplémentaire à 2× ; seules les options données changent, jamais un montant). `pointage_api` : 15 types d'actions.
+**V0.29.4 :** migration `0017_group_holiday_time_actions` : trois actions de plus pour la gestion. `delete_group` (le groupe, ses membres et ses minimums de stock disparaissent ; rejouable), `set_holiday` (ajouter, renommer ou retirer un jour férié ou un congé de la construction : la gestion devient la source de la liste), `set_time_options` (les quatre options qui changent le temps : premier trajet non payé, « 4 jours de 10 h », retour avec avantages, 1re heure supplémentaire à 2× ; seules les options données changent, jamais un montant). `pointage_api` : 15 types d'actions.
 
 **V0.27.0 :** migration `0016_group_ids` : l'action `upsert_group` accepte un identifiant (`id`) choisi par la gestion : le même groupe porte le même uuid des deux côtés (pas de table de correspondance), la création est rejouable, le renommage est permis, un nom déjà pris par un autre groupe est refusé. Les groupes se gèrent côté gestion ; ici ils ne servent plus qu'à l'inventaire et au stock minimum.
 
 **V0.26.0 :** pour la gestion (côté 2). Migration `0015_sync_actions_export` : `apply_sync_action` accepte quatre actions de plus (`set_role` : changer le rôle d'un compte sauf gestionnaire ; `publish_announcement`, `edit_announcement` avec contrôle de version, `withdraw_announcement`), toutes rejouables et écrites au journal sans nom ; `export_jobs_for_import(du, au, statuts)` (gestionnaire avec double authentification, 366 jours et 50 000 fiches au plus, écrit au journal). Bouton « Exporter les fiches (CSV) » (`JobsCsvExport.jsx`, `src/lib/jobs-csv.js` : séparateur `;`, protection contre les formules) : plan de secours de la synchronisation. `pointage_api` : 12 types d'actions. Pas de `set_employee_number` : le numéro est attribué par la gestion à `register_account`. Aperçu SQL régénéré.
 **V0.25.0 :** boutons d'**approbation retirés** de la boîte « À traiter » (`TodoInbox`) et du tableau de bord (`ManagerDashboard` : approuver une fiche, approuver la semaine) : ils appelaient `push_approved_batch`, qui n'existe pas au côté 1 (l'approbation vient du côté 2, `approve_jobs`). Message « L'approbation se fait dans la gestion » ; `approvalOutcome` et 48 textes devenus inutiles retirés. Garde-fou `src/lib/side-boundaries.test.js` : le code du côté 1 n'appelle ni approbation, ni paie, ni API d'échange, ni clé de service. `docs/pret-deploiement.md` : état de préparation (prêt pour l'aperçu, pas pour la mise en service) et bloquants.
 
-**V0.29.3 :** `.github/workflows/deploy-functions.yml` : déploiement MANUEL de `pointage_api` et `activate_account` (sans vérification JWT, voulu) sur le projet de test, depuis l'onglet Actions ; secrets GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, au besoin `ALLOWED_ORIGIN`.
+**V0.29.4 :** `.github/workflows/deploy-functions.yml` : déploiement MANUEL de `pointage_api` et `activate_account` (sans vérification JWT, voulu) sur le projet de test, depuis l'onglet Actions ; secrets GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, au besoin `ALLOWED_ORIGIN`.
 
-**V0.29.3 :** le déploiement par GitHub ajoute `--yes` (le CLI Supabase demandait une confirmation impossible à poser dans Actions : « Deploy 1 Function », échec constaté au premier essai).
+**V0.29.4 :** le déploiement par GitHub ajoute `--yes` (le CLI Supabase demandait une confirmation impossible à poser dans Actions : « Deploy 1 Function », échec constaté au premier essai).
 
-**V0.29.3 :** `--yes` aussi pour `supabase secrets set` du déploiement GitHub.
+**V0.29.4 :** `--yes` aussi pour `supabase secrets set` du déploiement GitHub.
 
-**V0.29.3 :** le déploiement GitHub nettoie les secrets (espaces, guillemets) et vérifie leur forme (`sbp_…`, 20 lettres) avec un message clair ; échec constaté côté 1 : « Invalid access token format ».
+**V0.29.4 :** le déploiement GitHub nettoie les secrets (espaces, guillemets) et vérifie leur forme (`sbp_…`, 20 lettres) avec un message clair ; échec constaté côté 1 : « Invalid access token format ».
+
+**V0.29.4 :** le déploiement GitHub affiche d'abord le nombre de projets visibles avec le jeton et la région du projet visé (aucun nom ni référence : le journal du côté 1 est public) ; il s'arrête avec un message clair si la référence n'est pas celle d'un projet du compte.
