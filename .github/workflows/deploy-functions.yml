@@ -23,7 +23,7 @@ jobs:
         run: |
           for fn in pointage_api activate_account; do
             echo "→ $fn"
-            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt --yes
           done
       - name: Adresse autorisée pour l'activation (si le secret GitHub ALLOWED_ORIGIN existe)
         env:
