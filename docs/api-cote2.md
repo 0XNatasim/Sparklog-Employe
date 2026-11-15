@@ -21,7 +21,7 @@ Le côté 2 (Sparklog-Gestion) appelle le côté 1 ; le côté 1 n'appelle jamai
 | GET | `/claims/changed` | `after_ts`, `after_id`, `limit` | demandes repas / stationnement, curseur `(changed_at, id)` |
 | POST | `/actions` | corps JSON `{ action_key (uuid), type, payload (objet) }`, 256 Ko au plus | `{ ok: true, result }` |
 
-Types d'action : `approve_jobs`, `return_job`, `set_pause`, `register_account`, `reissue_activation_code`, `unlock_day`, `upsert_group`, `set_group_members`, `set_role`, `publish_announcement`, `edit_announcement`, `withdraw_announcement` (V0.26.0, 0015).
+Types d'action : `approve_jobs`, `return_job`, `set_pause`, `register_account`, `reissue_activation_code`, `unlock_day`, `upsert_group`, `set_group_members`, `set_role`, `publish_announcement`, `edit_announcement`, `withdraw_announcement` (V0.26.0, 0015). `upsert_group` accepte `id` (uuid choisi par le côté 2, V0.27.0, 0016) : création ou mise à jour de CE groupe, renommage permis.
 
 Les pages sont `{ ok, data, has_more, next: { after_ts, after_id } | null }`. `after_ts` et `after_id` vont ensemble. Une page pleine annonce `has_more`.
 
