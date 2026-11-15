@@ -13,10 +13,15 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Vérifier les secrets GitHub
+      - name: Vérifier et nettoyer les secrets GitHub
         run: |
-          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Secret SUPABASE_ACCESS_TOKEN absent"; exit 1; }
-          test -n "$PROJECT_REF" || { echo "Secret SUPABASE_PROJECT_REF absent"; exit 1; }
+          T=$(printf %s "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]"')
+          R=$(printf %s "$PROJECT_REF" | tr -d '[:space:]"')
+          [[ "$T" =~ ^sbp_[A-Za-z0-9]+$ ]] || { echo "Le secret SUPABASE_ACCESS_TOKEN n'a pas la forme sbp_... : collez le jeton seul, sans autre texte."; exit 1; }
+          [[ "$R" =~ ^[a-z]{20}$ ]] || { echo "Le secret SUPABASE_PROJECT_REF doit être la référence seule : 20 lettres minuscules, sans https:// ni .supabase.co."; exit 1; }
+          echo "::add-mask::$T"
+          echo "SUPABASE_ACCESS_TOKEN=$T" >> "$GITHUB_ENV"
+          echo "PROJECT_REF=$R" >> "$GITHUB_ENV"
       - name: Préparer le dossier Supabase
         run: '[ -f supabase/config.toml ] || supabase init'
       - name: Déployer
