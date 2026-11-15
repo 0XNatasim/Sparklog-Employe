@@ -27,7 +27,10 @@ Dans **Authentication** (les noms exacts peuvent varier un peu) :
 2. **Mot de passe : longueur minimale 12**, **aucune exigence** de majuscule / chiffre / symbole (sinon l'activation échoue avec « activation_failed »).
 3. **Authentification à deux facteurs (MFA) : TOTP activé** (c'est normalement le cas). Elle est obligatoire pour le propriétaire.
 
-## Étape 4 — Mettre en ligne les deux fonctions (Edge Functions)
+## Étape 4 — Mettre en ligne les deux fonctions : par GitHub (sans terminal)
+Dans GitHub, dépôt `sparklog-employ-s` : **Settings › Secrets and variables › Actions › New repository secret**. Créez `SUPABASE_ACCESS_TOKEN` (supabase.com › Account › Access Tokens) et `SUPABASE_PROJECT_REF` (la partie de l'adresse avant `.supabase.co`). Puis onglet **Actions › Déployer les fonctions › Run workflow**. Supprimez le jeton quand vous avez fini.
+
+**Variante avec ordinateur :**
 C'est ce qui permet la **création des comptes** et **l'activation par code**. Sur votre ordinateur, dans le dossier du dépôt `sparklog-employ-s` (3 commandes ; la 1re ouvre le navigateur pour vous connecter) :
 ```
 npx supabase@latest login
