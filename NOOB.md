@@ -1,4 +1,4 @@
-# NOOB — Sparklog-Employés (V0.29.4)
+# NOOB — Sparklog-Employés (V0.29.5)
 
 **Ce que c'est :** la moitié « pointage » de Sparklog, en train d'être construite dans un nouveau dépôt. L'autre moitié (noms, paie) est dans `Sparklog-Gestion`.
 
@@ -74,19 +74,21 @@
 
 **V0.24.2 :** **décision notée : on garde OCR.space pour l'instant.** Tout ce qu'il faut pour passer à Tesseract plus tard est rangé dans `docs/ocr-tesseract.md` : le résultat de l'essai, ce qu'il reste à vérifier avant de décider (autres téléphones, écran en français, reçus, inventaire) et les étapes du changement. **Une chose à garder en tête :** tant qu'OCR.space reste, les captures et photos lues par l'OCR passent par un service **hors du Québec** ; il faudra l'écrire dans l'évaluation des facteurs relatifs à la vie privée, la politique de confidentialité et le consentement, et en parler à l'avocat ou à l'AECQ. **Rien ne change pour les employés.**
 
-**V0.29.4 :** **trois ordres de plus que la gestion peut donner ici** : supprimer un groupe d'employés, ajouter / changer / retirer un jour férié, et changer les options qui touchent le temps d'un employé (ex. « 4 jours de 10 h »). Les valeurs viennent de la gestion, qui devient la **source** ; chaque ordre est rejouable sans danger et noté au journal **sans nom ni valeur**. **Rien ne change pour les employés.**
+**V0.29.5 :** **trois ordres de plus que la gestion peut donner ici** : supprimer un groupe d'employés, ajouter / changer / retirer un jour férié, et changer les options qui touchent le temps d'un employé (ex. « 4 jours de 10 h »). Les valeurs viennent de la gestion, qui devient la **source** ; chaque ordre est rejouable sans danger et noté au journal **sans nom ni valeur**. **Rien ne change pour les employés.**
 
 **V0.27.0 :** **les groupes d'employés (entrepôts) se géreront dans la gestion** ; ici, l'application sait maintenant recevoir un groupe avec un identifiant imposé par la gestion (pour que les deux côtés parlent du même groupe) et accepte de le renommer. **Rien ne change pour les employés.**
 
 **V0.26.0 :** **Préparation du côté gestion.** J'ai ajouté ici ce dont la gestion a besoin pour nous parler : changer le rôle d'un compte, publier / modifier / retirer une annonce, et un bouton **« Exporter les fiches (CSV) »** (plan de secours : un fichier des fiches par numéro d'employé, à importer dans la gestion puis à **supprimer**). Chaque action est notée au journal sans nom. **Rien ne change pour les employés.** Tout est testé sur une base locale, jamais sur un vrai serveur.
 **V0.25.0 :** **« Est-ce prêt à déployer ? » : prêt pour l'aperçu de test, pas pour la mise en service.** Le détail honnête est dans `docs/pret-deploiement.md`. En préparant la réponse, j'ai trouvé un **vrai défaut** : les boutons « Approuver » de la boîte « À traiter » et du tableau de bord appelaient une fonction qui n'existe plus dans cette application (l'approbation se fera dans Sparklog-Gestion) : ils auraient échoué. **Je les ai retirés**, avec un message qui explique où approuver, et j'ai ajouté un **test automatique** qui interdit à cette application d'appeler quoi que ce soit du côté gestion. **Ce qui manque avant la mise en service :** le côté gestion (approuver, noms, paie, annonces, création des comptes) n'est pas construit ; le serveur au Québec n'est pas choisi ni son responsable nommé ; la réponse écrite sur le fournisseur certifié, l'évaluation des facteurs relatifs à la vie privée, le consentement ; la reprise des données de l'ancienne base et le plan de bascule. **Ce qui n'a jamais été essayé pour de vrai :** le tout sur un vrai Supabase. **Prochaine étape utile : l'aperçu de test** (`docs/mode-emploi-apercu.md`). **Rien ne change pour les employés.**
 
-**V0.29.4 :** les deux fonctions du côté 1 se déploient maintenant depuis GitHub, sans terminal (étape 4 de `docs/mode-emploi-apercu.md`).
+**V0.29.5 :** les deux fonctions du côté 1 se déploient maintenant depuis GitHub, sans terminal (étape 4 de `docs/mode-emploi-apercu.md`).
 
-**V0.29.4 :** correction du déploiement par GitHub (le premier essai s'arrêtait sur une confirmation) ; relancez « Déployer les fonctions ».
+**V0.29.5 :** correction du déploiement par GitHub (le premier essai s'arrêtait sur une confirmation) ; relancez « Déployer les fonctions ».
 
-**V0.29.4 :** correction du déploiement par GitHub (étape des secrets).
+**V0.29.5 :** correction du déploiement par GitHub (étape des secrets).
 
-**V0.29.4 :** le déploiement GitHub dit maintenant clairement quel secret est mal collé.
+**V0.29.5 :** le déploiement GitHub dit maintenant clairement quel secret est mal collé.
 
-**V0.29.4 :** le déploiement GitHub vérifie que le jeton voit bien le projet visé et le dit clairement.
+**V0.29.5 :** le déploiement GitHub vérifie que le jeton voit bien le projet visé et le dit clairement.
+
+**V0.29.5 :** pour Canner, ajoutez la variable `PWA_SW_MINIFY` = `0` avant de compiler (sa compilation s'arrêtait à la toute fin, sur le service worker).

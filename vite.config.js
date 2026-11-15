@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import fs from "fs";
@@ -19,7 +19,11 @@ function versionManifest() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+// PWA_SW_MINIFY=0 : saute la minification du service worker (terser) — nécessaire sur un hébergeur à faible mémoire (Canner : « Unable to write the service worker file »).
+const env = loadEnv(mode, process.cwd(), "");
+const swMode = (env.PWA_SW_MINIFY || process.env.PWA_SW_MINIFY) === "0" ? "development" : "production";
+return {
   plugins: [
     react(),
     versionManifest(),
@@ -46,6 +50,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        mode: swMode,
         // SPA: unknown navigations fall back to the cached app shell so the app
         // opens offline. API/auth calls are never cached (must hit the network).
         navigateFallback: "/index.html",
@@ -80,4 +85,5 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+};
 });
