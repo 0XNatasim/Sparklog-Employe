@@ -17,7 +17,7 @@ export const MAX_LIMIT = 500;
 export const ACTION_TYPES = Object.freeze([
   "approve_jobs", "return_job", "set_pause", "register_account", "reissue_activation_code", "unlock_day", "upsert_group", "set_group_members",
   "set_role", "publish_announcement", "edit_announcement", "withdraw_announcement",
-  "delete_group", "set_holiday", "set_time_options",
+  "delete_group", "set_holiday", "set_time_options", "delete_account",
 ]);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -192,6 +192,23 @@ async function registerAccount(deps, clientId, actionKey, payload) {
   return json(200, { ok: true, result: data });
 }
 
+// delete_account : seulement un compte SANS fiche (409 `account_has_jobs` sinon). Le profil est vérifié par la base, le compte de connexion supprimé ICI (clé de service), ses fichiers
+// retirés au mieux, puis le journal écrit. Rejouable : un numéro déjà absent répond `already: true`.
+async function deleteAccount(deps, clientId, payload) {
+  const number = payload.employee_number;
+  if (!Number.isInteger(number) || number < EMPLOYEE_NUMBER_MIN || number > EMPLOYEE_NUMBER_MAX) return fail(422, "invalid_employee_number");
+  const prepared = await deps.rpc("sync_delete_account_prepare", { p_client: clientId, p_number: number });
+  if (prepared.error) return errResponse(prepared.error);
+  if (prepared.data?.already === true) return json(200, { ok: true, result: { deleted: false, already: true } });
+  const userId = prepared.data?.user_id;
+  if (typeof userId !== "string") return fail(500, "internal_error");
+  try { await deps.removeUserStorage?.(userId); } catch { /* fichiers orphelins : repris par le ménage */ }
+  try { await deps.deleteAuthUser(userId); } catch { return fail(500, "internal_error"); }
+  const done = await deps.rpc("sync_delete_account_done", { p_client: clientId, p_number: number });
+  if (done.error) return json(200, { ok: true, result: { deleted: true, audited: false } });   // le compte est parti : l'échec du journal ne change pas la réponse
+  return json(200, { ok: true, result: { deleted: true, already: false } });
+}
+
 export async function handle(request, deps) {
   const route = routeOf(request.url);
   const log = (status) => { try { deps.log?.({ route, status }); } catch { /* le journal ne bloque jamais une réponse */ } };
@@ -214,6 +231,7 @@ export async function handle(request, deps) {
     if (!ACTION_TYPES.includes(type)) return done(fail(422, "unknown_action_type"));
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return done(fail(422, "invalid_payload"));
     if (type === "register_account") return done(await registerAccount(deps, auth.clientId, actionKey, payload));
+    if (type === "delete_account") return done(await deleteAccount(deps, auth.clientId, payload));
     const { data, error } = await deps.rpc("apply_sync_action", { p_client: auth.clientId, p_action_key: actionKey, p_type: type, p_payload: payload });
     if (error) return done(errResponse(error));
     return done(json(200, { ok: true, result: data }));

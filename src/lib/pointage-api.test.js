@@ -201,7 +201,7 @@ describe("actions", () => {
   });
 
   it("n'accepte que les types prévus", async () => {
-    expect(ACTION_TYPES).toEqual(["approve_jobs", "return_job", "set_pause", "register_account", "reissue_activation_code", "unlock_day", "upsert_group", "set_group_members", "set_role", "publish_announcement", "edit_announcement", "withdraw_announcement", "delete_group", "set_holiday", "set_time_options"]);
+    expect(ACTION_TYPES).toEqual(["approve_jobs", "return_job", "set_pause", "register_account", "reissue_activation_code", "unlock_day", "upsert_group", "set_group_members", "set_role", "publish_announcement", "edit_announcement", "withdraw_announcement", "delete_group", "set_holiday", "set_time_options", "delete_account"]);
     for (const type of [undefined, "", "delete_everything", "SET_PAUSE", 12]) {
       const deps = makeDeps();
       const r = await read(await handle(post({ ...good, type }), deps));
@@ -359,5 +359,57 @@ describe("branchement Deno (index.ts)", () => {
     expect(source).not.toMatch(/console\.(log|info|warn|error)\([^)]*(request|authorization|secret|body|headers)/i);
     expect(source).toContain("verify_jwt = false");
     expect(source).not.toMatch(/Access-Control/i);
+  });
+});
+
+describe("delete_account : suppression d'un compte sans fiche", () => {
+  const UID = "55555555-5555-4555-8555-555555555555";
+  const body = (n = 4821) => ({ action_key: KEY, type: "delete_account", payload: { employee_number: n } });
+  const make = (responses = {}, over = {}) => {
+    const deleted = []; const storage = [];
+    const deps = makeDeps({ responses: { sync_delete_account_prepare: { data: { user_id: UID, already: false }, error: null }, sync_delete_account_done: { data: null, error: null }, ...responses } });
+    deps.deleteAuthUser = async (id) => { deleted.push(id); if (over.deleteFails) throw new Error("x"); };
+    deps.removeUserStorage = async (id) => { storage.push(id); if (over.storageFails) throw new Error("x"); };
+    return { deps, deleted, storage };
+  };
+
+  it("vérifie, retire les fichiers, supprime le compte de connexion, puis écrit au journal (dans cet ordre)", async () => {
+    const { deps, deleted, storage } = make();
+    const r = await read(await handle(post(body()), deps));
+    expect(r.status).toBe(200);
+    expect(r.body.result).toEqual({ deleted: true, already: false });
+    expect(deleted).toEqual([UID]); expect(storage).toEqual([UID]);
+    expect(dataCalls(deps).map((c) => c.name)).toEqual(["sync_delete_account_prepare", "sync_delete_account_done"]);
+  });
+  it("un compte avec des fiches est refusé (409) et RIEN n'est supprimé", async () => {
+    const { deps, deleted } = make({ sync_delete_account_prepare: { data: null, error: { code: "40001", message: "account_has_jobs" } } });
+    const r = await read(await handle(post(body()), deps));
+    expect(r.status).toBe(409); expect(r.body.error).toBe("account_has_jobs");
+    expect(deleted).toEqual([]);
+  });
+  it("rejouable : un numéro déjà absent répond « already » sans rien supprimer", async () => {
+    const { deps, deleted } = make({ sync_delete_account_prepare: { data: { user_id: null, already: true }, error: null } });
+    const r = await read(await handle(post(body()), deps));
+    expect(r.status).toBe(200); expect(r.body.result.already).toBe(true); expect(deleted).toEqual([]);
+  });
+  it("numéro invalide : 422 avant tout appel à la base", async () => {
+    for (const n of [0, 1000000, "4821", null]) {
+      const { deps } = make();
+      const r = await read(await handle(post(body(n)), deps));
+      expect(r.status, String(n)).toBe(422);
+      expect(dataCalls(deps)).toEqual([]);
+    }
+  });
+  it("un échec de la suppression du compte de connexion est une erreur (500), sans écrire au journal ; un échec des fichiers ne bloque pas", async () => {
+    const a = make({}, { deleteFails: true });
+    expect((await handle(post(body()), a.deps)).status).toBe(500);
+    expect(dataCalls(a.deps).map((c) => c.name)).toEqual(["sync_delete_account_prepare"]);
+    const b = make({}, { storageFails: true });
+    expect((await handle(post(body()), b.deps)).status).toBe(200);
+  });
+  it("l'échec du journal ne change pas la réponse (le compte est déjà parti)", async () => {
+    const { deps } = make({ sync_delete_account_done: { data: null, error: { code: "XX000", message: "x" } } });
+    const r = await read(await handle(post(body()), deps));
+    expect(r.status).toBe(200); expect(r.body.result.deleted).toBe(true);
   });
 });

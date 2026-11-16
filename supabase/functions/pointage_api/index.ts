@@ -30,7 +30,22 @@ serve(async (request) => {
       const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
       return error ? { id: null, error: { code: error.code ?? "auth_error" } } : { id: data.user.id, error: null };
     },
-    deleteAuthUser: async (id: string) => { await admin.auth.admin.deleteUser(id); },
+    deleteAuthUser: async (id: string) => {
+      const { error } = await admin.auth.admin.deleteUser(id);
+      if (error) throw new Error("delete_failed");
+    },
+    // Fichiers du compte (un dossier par identifiant dans chaque seau) : au mieux, un échec ne bloque pas la suppression.
+    removeUserStorage: async (id: string) => {
+      for (const bucket of ["meal-receipts", "overtime-evidence", "parking-receipts", "inventory-screenshots"]) {
+        for (let guard = 0; guard < 100; guard++) {
+          const { data } = await admin.storage.from(bucket).list(id, { limit: 100, offset: 0 });
+          const paths = (data || []).filter((item) => item.id).map((item) => `${id}/${item.name}`);
+          if (paths.length === 0) break;
+          const { error } = await admin.storage.from(bucket).remove(paths);
+          if (error || paths.length < 100) break;
+        }
+      }
+    },
     // Journal minimal : route et code de réponse. Jamais le secret, le corps ni les paramètres.
     log: ({ route, status }: { route: string; status: number }) => console.log(JSON.stringify({ route, status })),
   });

@@ -12,7 +12,9 @@ Jamais de valeur personnelle (nom, NAS, salaire, montant de paie) dans le dépô
 
 **Règle de sécurité des tables :** pour toute nouvelle table, `revoke all … from anon, public, authenticated` **avant** les `grant` voulus (Supabase donne des droits par défaut).
 
-## État (V0.29.7)
+## État (V0.29.8)
+
+**V0.29.8 :** action `delete_account` de `pointage_api` (15 → 16 types) : suppression d'un compte SANS fiche demandée par le côté 2 (comme l'ancien `delete_user` de Sparklog : nettoyer une erreur, jamais un employé qui a des fiches). Migration `0019_delete_account` : `sync_delete_account_prepare(client, numéro)` (refuse un compte de gestion `22023 role_not_supported` et un compte qui a des fiches `40001 account_has_jobs` → 409 ; numéro absent = `already`, rejouable) et `sync_delete_account_done` (journal `account_deleted`, numéro seulement), `service_role` seulement. `handler.js` `deleteAccount` : prépare → `removeUserStorage` (au mieux, 4 seaux, un dossier par identifiant) → `deleteAuthUser` (le profil et ses lignes partent en cascade ; un échec = 500 sans journal) → journal (son échec ne change pas la réponse). Tests : `test-0019.sql` + mutation (contrôle des fiches retiré → échec), `pointage-api.test.js` (6 cas, mutation : refus ignoré → échec). **Appliquer 0019, puis redéployer `pointage_api`.**
 
 **V0.29.7 :** le groupe « Admin » du menu latéral s'appelle « Outils » (`mgr.nav3.group.admin`) : il ne contient que le Journal et la Feuille de temps d'urgence (propriétaire), jamais la gestion (approbation, paie, employés : côté 2). Texte seulement.
 

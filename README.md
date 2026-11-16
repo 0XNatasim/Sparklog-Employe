@@ -1,4 +1,4 @@
-# Sparklog-Employés (côté 1 : pointage) — V0.29.7
+# Sparklog-Employés (côté 1 : pointage) — V0.29.8
 
 Application de **pointage** de Sparklog, version « en deux côtés ». Elle remplace, à terme, le dépôt `Sparklog` (mis de côté).
 Le **côté 2** (noms, courriels, téléphones, paie, NAS) est dans `Sparklog-Gestion` (privé).
@@ -72,6 +72,8 @@ Commandes : `npm ci`, `npm run dev`, `npm run build`, `npm test`, `npm run lint`
 **V0.24.1 :** résultat du banc d'essai Tesseract 5.3 (eng + fra, modèles « fast » d'Ubuntu) sur 14 captures Field Service réelles + 1 photo sans rapport : **mode `--psm 11` (texte épars), image brute : 14/14 captures lues sans aucune erreur** (OT, date, départ, arrivée, fin, km, miles) ; `--psm 6` / `4` / `3` : tous les champs sauf les « miles » (le contrôle de cohérence km / miles ne se ferait pas) ; agrandir ×2 ou ×3 ne sert à rien (1 à 2 OT mal lus de plus) ; la réduction à 1600 px / JPEG 70 de l'application ne nuit pas ; la photo sans rapport ne produit aucun champ (0 faux positif). Durée : environ 10 s par image sur 4 cœurs (eng + fra, 1080 × 2340) : à réduire (eng seul, image réduite) avant de décider. Limites : 14 captures dont plusieurs sont la même fiche (environ 7 fiches distinctes), un seul téléphone, aucune comparaison avec OCR.space.
 
 **V0.24.2 :** décision de la propriétaire : **OCR.space est gardé pour l'instant** ; Tesseract est noté dans `docs/ocr-tesseract.md` (résultat de l'essai, limites, essai à compléter, plan de travail si on change). Aucun code changé.
+
+**V0.29.8 :** action `delete_account` de `pointage_api` (15 → 16 types) : suppression d'un compte SANS fiche demandée par le côté 2 (comme l'ancien `delete_user` de Sparklog : nettoyer une erreur, jamais un employé qui a des fiches). Migration `0019_delete_account` : `sync_delete_account_prepare(client, numéro)` (refuse un compte de gestion `22023 role_not_supported` et un compte qui a des fiches `40001 account_has_jobs` → 409 ; numéro absent = `already`, rejouable) et `sync_delete_account_done` (journal `account_deleted`, numéro seulement), `service_role` seulement. `handler.js` `deleteAccount` : prépare → `removeUserStorage` (au mieux, 4 seaux, un dossier par identifiant) → `deleteAuthUser` (le profil et ses lignes partent en cascade ; un échec = 500 sans journal) → journal (son échec ne change pas la réponse). Tests : `test-0019.sql` + mutation (contrôle des fiches retiré → échec), `pointage-api.test.js` (6 cas, mutation : refus ignoré → échec). **Appliquer 0019, puis redéployer `pointage_api`.**
 
 **V0.29.7 :** le groupe « Admin » du menu latéral s'appelle « Outils » (`mgr.nav3.group.admin`) : il ne contient que le Journal et la Feuille de temps d'urgence (propriétaire), jamais la gestion (approbation, paie, employés : côté 2). Texte seulement.
 

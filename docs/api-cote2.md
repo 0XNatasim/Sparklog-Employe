@@ -21,7 +21,7 @@ Le côté 2 (Sparklog-Gestion) appelle le côté 1 ; le côté 1 n'appelle jamai
 | GET | `/claims/changed` | `after_ts`, `after_id`, `limit` | demandes repas / stationnement, curseur `(changed_at, id)` |
 | POST | `/actions` | corps JSON `{ action_key (uuid), type, payload (objet) }`, 256 Ko au plus | `{ ok: true, result }` |
 
-Types d'action : `approve_jobs`, `return_job`, `set_pause`, `register_account`, `reissue_activation_code`, `unlock_day`, `upsert_group`, `set_group_members`, `set_role`, `publish_announcement`, `edit_announcement`, `withdraw_announcement` (V0.26.0, 0015). `delete_group`, `set_holiday`, `set_time_options` (V0.28.0, 0017). `upsert_group` accepte `id` (uuid choisi par le côté 2, V0.27.0, 0016) : création ou mise à jour de CE groupe, renommage permis.
+Types d'action : `approve_jobs`, `return_job`, `set_pause`, `register_account`, `reissue_activation_code`, `unlock_day`, `upsert_group`, `set_group_members`, `set_role`, `publish_announcement`, `edit_announcement`, `withdraw_announcement` (V0.26.0, 0015). `delete_group`, `set_holiday`, `set_time_options` (V0.28.0, 0017). `delete_account` (V0.29.8, 0019 : `{ employee_number }`, seulement un compte SANS fiche, sinon 409 `account_has_jobs` ; un compte de gestion est refusé ; rejouable : `{ deleted: false, already: true }` si le numéro n'existe plus ; supprime le compte de connexion, ses fichiers et, en cascade, le profil). `upsert_group` accepte `id` (uuid choisi par le côté 2, V0.27.0, 0016) : création ou mise à jour de CE groupe, renommage permis.
 
 Les pages sont `{ ok, data, has_more, next: { after_ts, after_id } | null }`. `after_ts` et `after_id` vont ensemble. Une page pleine annonce `has_more`.
 
