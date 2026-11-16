@@ -36,7 +36,7 @@ describe("activate_account", () => {
 
   it("refuse sans toucher à la base un numéro, un code ou un mot de passe invalide", async () => {
     const cases = [
-      [{ ...GOOD, employee_number: 999 }, "invalid_employee_number"], [{ ...GOOD, employee_number: "4821" }, "invalid_employee_number"], [{ ...GOOD, employee_number: 1000000 }, "invalid_employee_number"],
+      [{ ...GOOD, employee_number: 0 }, "invalid_employee_number"], [{ ...GOOD, employee_number: "4821" }, "invalid_employee_number"], [{ ...GOOD, employee_number: 1000000 }, "invalid_employee_number"],
       [{ ...GOOD, code: "ABCDEFGHJ" }, "invalid_code_format"], [{ ...GOOD, code: "ABCDEFGHJ0" }, "invalid_code_format"], [{ ...GOOD, code: "OOOOOOOOOO" }, "invalid_code_format"], [{ ...GOOD, code: 12345 }, "invalid_code_format"],
       [{ ...GOOD, password: "court" }, "password_too_short"], [{ ...GOOD, password: "x".repeat(PASSWORD_MAX + 1) }, "password_too_long"], [{ ...GOOD, password: undefined }, "invalid_password"],
       [{ ...GOOD, password: "mon numero 4821 perso" }, "password_too_guessable"], [{ ...GOOD, password: "le code abcdefghjk ici" }, "password_too_guessable"],

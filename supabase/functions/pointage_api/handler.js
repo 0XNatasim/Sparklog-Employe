@@ -159,7 +159,7 @@ async function readJsonBody(request) {
 }
 
 // Plage des numéros d'employé (0001_identity) et adresse factice de connexion : aucune donnée personnelle côté 1.
-export const EMPLOYEE_NUMBER_MIN = 1000;
+export const EMPLOYEE_NUMBER_MIN = 1;
 export const EMPLOYEE_NUMBER_MAX = 999999;
 export const FAKE_EMAIL_DOMAIN = "pointage.invalid";
 

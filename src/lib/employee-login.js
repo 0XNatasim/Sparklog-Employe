@@ -3,7 +3,7 @@
 import { withTimeout } from "@/lib/utils";
 
 export const FAKE_EMAIL_DOMAIN = "pointage.invalid";
-export const EMPLOYEE_NUMBER_MIN = 1000;
+export const EMPLOYEE_NUMBER_MIN = 1;
 export const EMPLOYEE_NUMBER_MAX = 999999;
 export const PASSWORD_MIN = 12;
 export const PASSWORD_MAX = 72;
@@ -13,10 +13,13 @@ const CODE_RE = new RegExp(`^[${CODE_ALPHABET}]{10}$`);
 // Texte saisi → entier valide, sinon null. Seuls les chiffres comptent (espaces tolérés) ; jamais d'adresse courriel ici.
 export function parseEmployeeNumber(text) {
   const digits = String(text ?? "").replace(/\s/g, "");
-  if (!/^\d{4,6}$/.test(digits)) return null;
+  if (!/^\d{1,6}$/.test(digits)) return null;
   const n = Number(digits);
   return n >= EMPLOYEE_NUMBER_MIN && n <= EMPLOYEE_NUMBER_MAX ? n : null;
 }
+
+// Affichage : toujours 4 chiffres au moins (« 0001 »). Le numéro stocké reste un entier.
+export const formatEmployeeNumber = (n) => (Number.isInteger(n) ? String(n).padStart(4, "0") : "");
 
 export const loginEmail = (number) => `${number}@${FAKE_EMAIL_DOMAIN}`;
 

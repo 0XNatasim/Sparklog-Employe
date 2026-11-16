@@ -10,7 +10,7 @@
 export const MAX_BODY_BYTES = 2048;
 export const PASSWORD_MIN = 12;
 export const PASSWORD_MAX = 72; // bcrypt ignore le reste
-export const EMPLOYEE_NUMBER_MIN = 1000;
+export const EMPLOYEE_NUMBER_MIN = 1;
 export const EMPLOYEE_NUMBER_MAX = 999999;
 export const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{10}$/;
 

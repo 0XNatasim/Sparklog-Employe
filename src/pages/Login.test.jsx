@@ -44,7 +44,7 @@ describe("Login par numéro d'employé", () => {
 
   it("garde le bouton désactivé tant que le numéro est invalide", () => {
     render(<Login />);
-    type("login.number", "12");
+    type("login.number", "12a");
     type("auth.password", "x");
     expect(screen.getByText("login.numberInvalid")).toBeTruthy();
     expect(screen.getAllByRole("button").find((b) => b.type === "submit").disabled).toBe(true);

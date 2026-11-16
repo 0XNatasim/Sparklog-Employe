@@ -19,7 +19,7 @@ describe("foreman reports", () => {
     expect(cleanReport({ auditedNumber: "", body: "x" })).toEqual({ auditedNumber: null, body: "x" });
     expect(cleanReport({ auditedNumber: "", body: "   " })).toBeNull();
     expect(cleanReport({ auditedNumber: "", body: "x".repeat(MAX_REPORT + 1) })).toBeNull();
-    for (const bad of ["Paul", "999", "1000000", "48.21", "4821a"]) expect(cleanReport({ auditedNumber: bad, body: "x" }), bad).toBeNull();
+    for (const bad of ["Paul", "0", "1000000", "48.21", "4821a"]) expect(cleanReport({ auditedNumber: bad, body: "x" }), bad).toBeNull();
   });
 
   it("attaches a new note to its job, edits the existing one, and treats a repeated key as the same note", async () => {

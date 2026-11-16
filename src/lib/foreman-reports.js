@@ -8,7 +8,7 @@ import { employeeLabel } from "@/lib/employee-label";
 // the job is returned for correction); the managers read, delete and export the notes in Notes › Contremaître.
 export const FOREMAN_OT_LABEL = "CONTREMAÎTRE";
 export const MAX_REPORT = 5000;
-export const AUDITED_NUMBER_MIN = 1000;
+export const AUDITED_NUMBER_MIN = 1;
 export const AUDITED_NUMBER_MAX = 999999;
 
 // True when the work order text is the « CONTREMAÎTRE » choice (case and spaces ignored, like any preset).
@@ -17,13 +17,13 @@ export const isForemanOt = (ot) => Boolean(matchPreset(ot, [FOREMAN_OT_LABEL]));
 const tidy = (value) => String(value ?? "").replace(/[ \t]+/g, " ").trim();
 
 // The report as stored, or null when the table would refuse it (empty or too long text, or an audited number that is not an employee number).
-// The audited employee is a NUMBER (never a name, invariant I1): 4 to 6 digits between 1000 and 999999, or nothing.
+// The audited employee is a NUMBER (never a name, invariant I1): 1 to 6 digits between 1 and 999999, or nothing.
 export function cleanReport({ auditedNumber, body }) {
   const text = String(body ?? "").replace(/\r\n/g, "\n").trim();
   const raw = tidy(auditedNumber).replace(/\s/g, "");
   let number = null;
   if (raw !== "") {
-    if (!/^\d{4,6}$/.test(raw)) return null;
+    if (!/^\d{1,6}$/.test(raw)) return null;
     number = Number(raw);
     if (number < AUDITED_NUMBER_MIN || number > AUDITED_NUMBER_MAX) return null;
   }

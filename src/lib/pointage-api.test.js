@@ -271,7 +271,7 @@ describe("register_account : compte à adresse factice", () => {
   });
 
   it("refuse un numéro hors plage avant tout compte", async () => {
-    for (const n of [999, 1000.5, "4821", null, 1000000, undefined]) {
+    for (const n of [0, 1000.5, "4821", null, 1000000, undefined]) {
       const { deps, created } = withAuth();
       const r = await read(await handle(post({ ...body(), payload: { employee_number: n, role: "employee" } }), deps));
       expect([r.status, r.body.error], String(n)).toEqual([422, "invalid_employee_number"]);

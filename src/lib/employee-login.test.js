@@ -3,17 +3,22 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/supabaseClient", () => ({ supabase: {} }));
 import {
-  CODE_ALPHABET, PASSWORD_MAX, PASSWORD_MIN, activateAccount, activationErrorKey, isValidCodeFormat, loginEmail, normalizeCode, parseEmployeeNumber, passwordProblem,
+  CODE_ALPHABET, PASSWORD_MAX, PASSWORD_MIN, activateAccount, activationErrorKey, isValidCodeFormat, loginEmail, formatEmployeeNumber, normalizeCode, parseEmployeeNumber, passwordProblem,
 } from "./employee-login";
 import { dictionaries } from "./i18n";
 
 describe("numéro d'employé", () => {
-  it("accepte 1000 à 999999, refuse le reste", () => {
+  it("accepte 1 à 999999 (affiché sur 4 chiffres), refuse le reste", () => {
     expect(parseEmployeeNumber("4821")).toBe(4821);
     expect(parseEmployeeNumber(" 48 21 ")).toBe(4821);
     expect(parseEmployeeNumber("1000")).toBe(1000);
     expect(parseEmployeeNumber("999999")).toBe(999999);
-    for (const bad of ["999", "1000000", "12a4", "", null, undefined, "4821@pointage.invalid", "-4821", "48.21"]) expect(parseEmployeeNumber(bad), String(bad)).toBeNull();
+    expect(parseEmployeeNumber("0001")).toBe(1);
+    expect(parseEmployeeNumber("73")).toBe(73);
+    expect(formatEmployeeNumber(1)).toBe("0001");
+    expect(formatEmployeeNumber(4821)).toBe("4821");
+    expect(formatEmployeeNumber(123456)).toBe("123456");
+    for (const bad of ["0", "000", "1000000", "12a4", "", null, undefined, "4821@pointage.invalid", "-4821", "48.21"]) expect(parseEmployeeNumber(bad), String(bad)).toBeNull();
   });
   it("fabrique l'adresse factice", () => expect(loginEmail(4821)).toBe("4821@pointage.invalid"));
 });

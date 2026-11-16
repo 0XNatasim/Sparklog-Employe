@@ -12,7 +12,9 @@ Jamais de valeur personnelle (nom, NAS, salaire, montant de paie) dans le dépô
 
 **Règle de sécurité des tables :** pour toute nouvelle table, `revoke all … from anon, public, authenticated` **avant** les `grant` voulus (Supabase donne des droits par défaut).
 
-## État (V0.29.5)
+## État (V0.29.6)
+
+**V0.29.6 :** numéros d'employé de 1 à 999999 (avant : 1000 à 999999), décision de la propriétaire du 2026-11-16 : numéros 0001, 0002… Migration `0018_employee_number_range` (les anciennes bornes retirées par recherche dans `pg_constraint` — Postgres les écrit `>= 1000 AND <= 999999`, pas `between` —, puis `profiles_employee_number_range` et `foreman_reports_audited_number_range`) ; `EMPLOYEE_NUMBER_MIN = 1` dans `employee-login.js`, `pointage_api`, `activate_account`, `AUDITED_NUMBER_MIN = 1` ; saisie de 1 à 6 chiffres (`0012` = 12), `formatEmployeeNumber` et `employeeLabel` affichent au moins 4 chiffres (`#0012`). Le numéro reste un entier ; l'adresse factice est `<entier>@pointage.invalid`. Test `test-0018.sql` + mutation (borne remise à 1000 → échec constaté). **Appliquer la migration 0018 à la base, puis redéployer `pointage_api` et `activate_account`.**
 
 **V0.29.5 :** ajout de `--yes` à `functions deploy` (échec du 1er essai : confirmation interactive). `.github/workflows/deploy-functions.yml` (`workflow_dispatch` seulement ; `--no-verify-jwt` pour `pointage_api` et `activate_account` ; `ALLOWED_ORIGIN` posé si le secret GitHub existe). Jamais essayé.
 
