@@ -1,4 +1,4 @@
-# NOOB — Sparklog-Employés (V0.29.6)
+# NOOB — Sparklog-Employés (V0.29.7)
 
 **Ce que c'est :** la moitié « pointage » de Sparklog, en train d'être construite dans un nouveau dépôt. L'autre moitié (noms, paie) est dans `Sparklog-Gestion`.
 
@@ -73,6 +73,8 @@
 **V0.24.1 :** **résultat de l'essai de Tesseract sur vos captures : très bon.** Sur vos 14 captures Field Service, avec le bon réglage (lecture « texte épars »), il lit **tout correctement : OT, date, départ, arrivée, fin, km et miles, 14 fois sur 14**. La photo du panneau électrique ne donne **rien** (elle est donc bien refusée comme « pas une capture »). **Ce que ça ne prouve pas encore :** vos 14 captures représentent environ **7 fiches différentes** (plusieurs sont la même fiche), d'un seul téléphone, et je n'ai pas pu comparer avec l'OCR actuel. **Vitesse :** environ 10 secondes par image sur mon serveur : acceptable pour une lecture faite sur le serveur, à améliorer (langue anglaise seule, image réduite) avant la mise en service. **Pour être sûr :** 15 à 20 captures de plus, d'**autres téléphones et d'autres types d'écrans** (écran en français, fiche sans km, fiche avec « --- »). **Si ça tient, je recommande Tesseract sur le serveur.** **Rien ne change pour les employés.**
 
 **V0.24.2 :** **décision notée : on garde OCR.space pour l'instant.** Tout ce qu'il faut pour passer à Tesseract plus tard est rangé dans `docs/ocr-tesseract.md` : le résultat de l'essai, ce qu'il reste à vérifier avant de décider (autres téléphones, écran en français, reçus, inventaire) et les étapes du changement. **Une chose à garder en tête :** tant qu'OCR.space reste, les captures et photos lues par l'OCR passent par un service **hors du Québec** ; il faudra l'écrire dans l'évaluation des facteurs relatifs à la vie privée, la politique de confidentialité et le consentement, et en parler à l'avocat ou à l'AECQ. **Rien ne change pour les employés.**
+
+**V0.29.7 :** dans le menu de gauche, le groupe « Admin » s'appelle maintenant « Outils » : il ne contient que le Journal et la Feuille de temps d'urgence. La gestion (employés, paie, approbation) est dans l'autre application.
 
 **V0.29.6 :** les numéros d'employé peuvent maintenant être courts : 0001, 0002… (l'écran les affiche toujours sur 4 chiffres). **À faire :** dans Supabase du côté pointage › SQL Editor, lancer le contenu de `supabase/next/0018_employee_number_range.sql` ; puis sur GitHub › Actions › « Déployer les fonctions » › Run workflow.
 
